@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  /* Use dvh (dynamic viewport height) so the map fills correctly
+     when the mobile browser chrome shows/hides on scroll.
+     Falls back to 100% for older browsers. */
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #030712; /* gray-950 */
+}
+
+/* ── Mapbox overrides ───────────────────────────────────────────────────────── */
+
+/* Remove the default focus ring on the canvas — we handle focus styles via Tailwind. */
+.mapboxgl-canvas:focus {
+  outline: none;
+}
+
+/* Keep the Mapbox attribution legible on dark backgrounds. */
+.mapboxgl-ctrl-attrib-inner a {
+  color: #9ca3af !important;
+}
+
+/* Slightly dim the default Mapbox controls to match the dark theme. */
+.mapboxgl-ctrl-group {
+  background: rgba(3, 7, 18, 0.85) !important;
+  border: 1px solid rgba(55, 65, 81, 0.8) !important;
+  backdrop-filter: blur(8px);
+}
+
+.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in  .mapboxgl-ctrl-icon,
+.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-out .mapboxgl-ctrl-icon,
+.mapboxgl-ctrl button.mapboxgl-ctrl-compass  .mapboxgl-ctrl-icon {
+  filter: invert(0.8);
+}

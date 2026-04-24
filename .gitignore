@@ -1,0 +1,27 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+frontend/node_modules/
+backend/.venv/
+
+# ── Secrets — NEVER commit these ──────────────────────────────────────────────
+**/.env.local
+**/.env.*.local
+backend/.env
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+frontend/dist/
+frontend/.vite/
+
+# ── Lambda packaging ──────────────────────────────────────────────────────────
+*.zip
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.log

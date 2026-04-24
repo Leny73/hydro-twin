@@ -1,0 +1,23 @@
+# Backend Python dependencies — HydroTwin Lambda
+#
+# Deploy steps (Lambda zip):
+#   pip install -r requirements.txt -t .
+#   zip -r ../hydrotwin-backend.zip .
+#   aws lambda update-function-code \
+#       --function-name HydroTwin \
+#       --zip-file fileb://../hydrotwin-backend.zip
+#
+# Local dev:
+#   pip install -r requirements.txt
+#   python local_server.py
+#
+# NOTE: boto3 is pre-installed in the AWS Lambda Python runtime.
+#       It IS included below so local_server.py works without modification.
+
+requests>=2.31.0
+boto3>=1.34.0
+
+# Local dev server extras (not needed in Lambda zip — exclude when packaging)
+flask>=3.0.0
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
