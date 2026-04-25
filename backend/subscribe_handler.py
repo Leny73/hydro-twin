@@ -50,14 +50,10 @@ logger.setLevel(logging.INFO)
 SUBSCRIPTIONS_TABLE = os.environ.get("SUBSCRIPTIONS_TABLE", "HydroTwinSubscriptions")
 AWS_REGION          = os.environ.get("AWS_REGION", "us-east-1")
 
-# Region whitelist — MUST stay in sync with frontend/src/App.jsx REGIONS[].id
-# (CLAUDE.md § Monitoring Regions). Adding a region requires updating both sites.
+# Region whitelist — MUST stay in sync with frontend/src/regions.geojson feature ids
+# (and frontend/src/App.jsx REGIONS[].id). Adding a region requires updating both sites.
 KNOWN_REGIONS = frozenset({
-    "mediterranean-basin",
-    "sahel-region",
-    "danube-basin",
-    "po-valley",
-    "nile-delta",
+    "pleven",
 })
 
 # Loose RFC-ish email regex — strict validation belongs to a verification email,
