@@ -77,8 +77,8 @@ export default function MapLegend({ lastUpdated, demoMode }) {
       </ul>
       <div className="border-t border-gray-700/60 pt-1.5">
         {demoMode ? (
-          <p className="text-[9px] text-yellow-400 leading-snug">
-            ⚠️ Snapshot unavailable
+          <p className="text-[9px] text-gray-500 leading-snug">
+            Live data offline
           </p>
         ) : relative ? (
           <p className={`text-[9px] leading-snug ${isStale ? 'text-yellow-400' : 'text-gray-400'}`}>
