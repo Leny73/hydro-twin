@@ -40,8 +40,9 @@ from flask_cors import CORS
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.local"),  override=True)
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.example"), override=False)
 
-# Import the Lambda handler — it works identically outside of Lambda
-from lambda_handler import lambda_handler
+# Import the Lambda handlers — they work identically outside of Lambda
+from lambda_handler import lambda_handler as assess_handler
+from subscribe_handler import lambda_handler as subscribe_handler
 
 app = Flask(__name__)
 
@@ -49,30 +50,33 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 
-@app.route("/assess", methods=["POST", "OPTIONS"])
-def assess():
-    """
-    Mimics the API Gateway → Lambda invocation locally.
-    POST /assess  with JSON body  { "region_id": "...", "bbox": [...] }
-    """
-    if request.method == "OPTIONS":
-        # Respond to CORS preflight
-        return "", 204
-
-    # Build a fake API Gateway event from the Flask request
+def _invoke_lambda(handler):
+    """Build a fake API Gateway event from the current Flask request and invoke handler."""
     fake_event = {
-        "httpMethod": "POST",
+        "httpMethod": request.method,
         "body":       request.get_data(as_text=True) or "{}",
         "headers":    dict(request.headers),
     }
-
-    # Invoke the Lambda handler as if it were running in AWS
-    result = lambda_handler(fake_event, context=None)
-
+    result          = handler(fake_event, context=None)
     response_body   = json.loads(result.get("body", "{}"))
     response_status = result.get("statusCode", 200)
-
     return jsonify(response_body), response_status
+
+
+@app.route("/assess", methods=["POST", "OPTIONS"])
+def assess():
+    """POST /assess  with JSON body  { "region_id": "...", "bbox": [...] }"""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _invoke_lambda(assess_handler)
+
+
+@app.route("/subscribe", methods=["POST", "OPTIONS"])
+def subscribe():
+    """POST /subscribe  with JSON body  { "email": "...", "region_id": "..." }"""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _invoke_lambda(subscribe_handler)
 
 
 @app.route("/health", methods=["GET"])
@@ -84,6 +88,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))
     print(f"\n  HydroTwin backend running at  http://localhost:{port}")
     print(f"  Health check:                   http://localhost:{port}/health")
-    print(f"  Assess endpoint:                http://localhost:{port}/assess  (POST)\n")
+    print(f"  Assess endpoint:                http://localhost:{port}/assess     (POST)")
+    print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe  (POST)\n")
     print(f"  Set VITE_API_ENDPOINT=http://localhost:{port}/assess in frontend/.env.local\n")
     app.run(host="0.0.0.0", port=port, debug=True)
