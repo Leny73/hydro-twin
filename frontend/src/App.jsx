@@ -554,6 +554,8 @@ export default function App() {
       parentRegionId: REGION_NAME_TO_ID[feature.properties.NAME_1] ?? null,
     };
     setSelectedRegion(muniRegion);
+    setReplayDate(null);
+    setReplayCuratedEvent(null);
     setError(null);
     fetchAssessment(muniRegion);
   }, [fetchAssessment]);
