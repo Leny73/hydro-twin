@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import MetricsSparkline from './MetricsSparkline';
 
 // ── Markdown renderer overrides for the `reasoning` field ─────────────────────
 // The Lambda asks Claude to return reasoning as light markdown (bold, bullets).
@@ -250,6 +251,9 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
               </ReactMarkdown>
             </blockquote>
           </div>
+
+          {/* ── Metrics Sparkline ─────────────────────────────────────────── */}
+          <MetricsSparkline />
 
           {/* ── Metadata Footer ───────────────────────────────────────────── */}
           <div className="text-[10px] text-gray-500 bg-gray-800/30 rounded-md p-2.5 border border-gray-800/60 leading-relaxed">
