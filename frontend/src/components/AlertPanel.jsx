@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 /**
  * AlertPanel.jsx — AI Risk Assessment Panel
  * ==========================================
@@ -44,19 +46,65 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
   const pct     = assessment ? Math.round((assessment.confidence ?? 0) * 100) : 0;
   const isAlert = ['DROUGHT_WARNING', 'FLOOD_WARNING'].includes(assessment?.status);
 
-  // ── Subscribe button handler — DEMO STUB ──────────────────────────────────
-  // TODO: Replace alert() with a real API call that registers the user's
-  //       webhook/channel ID in a DynamoDB subscription table, then triggers
-  //       a confirmation DM via the existing trigger_webhook() Lambda path.
-  const handleSubscribe = () => {
-    window.alert(
-      `[DEMO] You would now be subscribed to alerts for:\n\n` +
-      `  ${region?.name}\n\n` +
-      `In production this call:\n` +
-      `  1. POSTs your handle to a /subscribe Lambda endpoint\n` +
-      `  2. Registers a Discord/Telegram webhook via SNS\n` +
-      `  3. Sends a confirmation DM with opt-out instructions`
-    );
+  // ── Subscribe form state ──────────────────────────────────────────────────
+  const [formOpen,   setFormOpen]   = useState(false);
+  const [email,      setEmail]      = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [toast,      setToast]      = useState(null); // { kind: 'success' | 'error', msg } | null
+
+  // Reset form whenever the user picks a different region — otherwise an
+  // open form / stale toast would leak across selections.
+  useEffect(() => {
+    setFormOpen(false);
+    setEmail('');
+    setSubmitting(false);
+    setToast(null);
+  }, [region?.id]);
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEmail('');
+    setToast(null);
+  };
+
+  const submitSubscribe = async (e) => {
+    e.preventDefault();
+    const trimmed = email.trim();
+    // Basic client-side guard — backend revalidates, this just avoids
+    // wasting a round-trip on obvious typos.
+    if (!/^\S+@\S+\.\S+$/.test(trimmed)) {
+      setToast({ kind: 'error', msg: 'Please enter a valid email address.' });
+      return;
+    }
+    setToast(null);
+    setSubmitting(true);
+    try {
+      const base = import.meta.env.VITE_API_ENDPOINT ?? '';
+      const url  = base.replace('/assess', '/subscribe');
+      const res  = await fetch(url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email: trimmed, region_id: region?.id }),
+      });
+      if (res.status === 400) {
+        setToast({ kind: 'error', msg: 'That email was rejected — please double-check it.' });
+      } else if (!res.ok) {
+        setToast({ kind: 'error', msg: `Subscription failed (${res.status}). Please try again.` });
+      } else {
+        setToast({ kind: 'success', msg: `✅ You're subscribed for ${region?.name}` });
+        setEmail('');
+        setFormOpen(false);
+        // Auto-clear success toast so the panel doesn't stay cluttered.
+        // Functional update guards against clobbering a newer error toast.
+        setTimeout(() => {
+          setToast((t) => (t && t.kind === 'success' ? null : t));
+        }, 4000);
+      }
+    } catch {
+      setToast({ kind: 'error', msg: 'Network error — check your connection and retry.' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -195,20 +243,90 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
             {new Date().toUTCString()}
           </div>
 
-          {/* ── Subscribe CTA ─────────────────────────────────────────────── */}
-          <button
-            onClick={handleSubscribe}
-            className={`
-              mt-auto w-full py-3 rounded-lg text-xs font-bold tracking-widest uppercase
-              transition-all duration-200 active:scale-95 cursor-pointer
-              ${isAlert
-                ? 'bg-red-600 hover:bg-red-500 text-white'
-                : 'bg-cyan-800 hover:bg-cyan-700 text-white'}
-            `}
-            aria-label={`Subscribe to push alerts for ${region?.name}`}
-          >
-            {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to Push Alerts'}
-          </button>
+          {/* ── Toast: success / error feedback ───────────────────────────── */}
+          {toast && (
+            <div
+              role={toast.kind === 'error' ? 'alert' : 'status'}
+              aria-live="polite"
+              className={`mt-auto text-[11px] px-3 py-2 rounded-md text-center leading-relaxed border
+                ${toast.kind === 'success'
+                  ? 'bg-emerald-950/50 border-emerald-700/70 text-emerald-200'
+                  : 'bg-red-950/50 border-red-700/70 text-red-200'}`}
+            >
+              {toast.msg}
+            </div>
+          )}
+
+          {/* ── Subscribe CTA  →  expands to inline form ──────────────────── */}
+          {!formOpen ? (
+            <button
+              onClick={() => { setToast(null); setFormOpen(true); }}
+              className={`
+                ${toast ? '' : 'mt-auto'} w-full min-h-[44px] py-3 rounded-lg text-xs font-bold tracking-widest uppercase
+                transition-all duration-200 active:scale-95 cursor-pointer
+                ${isAlert
+                  ? 'bg-red-600 hover:bg-red-500 text-white'
+                  : 'bg-cyan-800 hover:bg-cyan-700 text-white'}
+              `}
+              aria-label={`Subscribe to push alerts for ${region?.name}`}
+            >
+              {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to Push Alerts'}
+            </button>
+          ) : (
+            <form
+              onSubmit={submitSubscribe}
+              className={`${toast ? '' : 'mt-auto'} flex flex-col gap-2`}
+              aria-label={`Subscribe form for ${region?.name}`}
+            >
+              <label
+                htmlFor="subscribe-email"
+                className="text-[10px] uppercase tracking-widest text-gray-400"
+              >
+                Email Address
+              </label>
+              <input
+                id="subscribe-email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={submitting}
+                placeholder="you@example.com"
+                aria-invalid={toast?.kind === 'error' ? 'true' : 'false'}
+                className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
+                           rounded-lg text-sm text-white placeholder-gray-500
+                           focus:outline-none focus:border-cyan-500
+                           disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`flex-1 min-h-[44px] py-3 rounded-lg text-xs font-bold tracking-widest uppercase
+                              transition-all duration-200 active:scale-95 cursor-pointer
+                              disabled:opacity-60 disabled:cursor-not-allowed
+                              ${isAlert
+                                ? 'bg-red-600 hover:bg-red-500 text-white'
+                                : 'bg-cyan-800 hover:bg-cyan-700 text-white'}`}
+                >
+                  {submitting ? 'Subscribing…' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  disabled={submitting}
+                  className="min-h-[44px] px-4 py-3 rounded-lg text-xs font-bold tracking-widest uppercase
+                             bg-gray-800 hover:bg-gray-700 text-gray-300
+                             transition-all duration-200 active:scale-95 cursor-pointer
+                             disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </>
       )}
 
