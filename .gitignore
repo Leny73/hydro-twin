@@ -25,3 +25,6 @@ frontend/.vite/
 Thumbs.db
 .vscode/settings.json
 *.log
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+.claude/
