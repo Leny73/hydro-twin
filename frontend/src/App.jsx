@@ -4,21 +4,22 @@
  *
  * Architecture:
  *   1. react-map-gl renders a full-screen Mapbox satellite map.
- *   2. REGIONS defines the five clickable monitoring zones (EU + Africa,
- *      aligned with the CASSINI Space for Water focus area).
- *   3. Clicking a region Marker fires a POST to the API Gateway → Lambda.
- *   4. The Lambda response (status, confidence, reasoning) is passed to
- *      AlertPanel, which renders the side panel overlay.
+ *   2. REGIONS defines six Bulgarian hydro-risk zones rendered as coloured
+ *      GeoJSON polygon overlays (fill + outline) instead of point markers.
+ *   3. Clicking or tapping a zone fires a POST to the API Gateway → Lambda.
+ *   4. Hovering a zone raises its opacity and changes the cursor to pointer.
+ *   5. The Lambda response is passed to AlertPanel (bottom sheet / sidebar).
  *
  * Environment variables required (.env.local):
  *   VITE_MAPBOX_TOKEN  – Mapbox public access token
  *   VITE_API_ENDPOINT  – API Gateway endpoint URL
  */
 
-import { useState, useCallback } from 'react';
-import Map, { Marker, NavigationControl, ScaleControl } from 'react-map-gl';
+import { useState, useCallback, useRef } from 'react';
+import Map, { Source, Layer, Marker, NavigationControl, ScaleControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import AlertPanel from './components/AlertPanel';
+import REGIONS_GEOJSON from './regions.geojson';
 
 // ── API / Token configuration ─────────────────────────────────────────────────
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
@@ -26,61 +27,71 @@ const API_ENDPOINT =
   import.meta.env.VITE_API_ENDPOINT ??
   'https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/assess';
 
-// ── Monitoring regions (CASSINI / Copernicus focus: EU + Africa) ──────────────
-// Each region has a centre point for the map marker and a bbox for the extractor.
+// ── Monitoring regions — Pleven Oblast focus ─────────────────────────────────
+// Centre coordinates + bbox kept here for label Markers and API calls.
+// Polygon shapes live in regions.geojson — edit that file to update boundaries.
 const REGIONS = [
   {
-    id:          'mediterranean-basin',
-    name:        'Mediterranean Basin',
-    description: 'High drought risk zone — Iberian + North African coast',
-    longitude:   13.5,
-    latitude:    37.5,
-    bbox:        [-6.0, 30.0, 37.0, 47.0],
-    color:       '#F59E0B', // amber
-  },
-  {
-    id:          'sahel-region',
-    name:        'Sahel Region',
-    description: 'Chronic drought belt — 12 °N latitude band across sub-Saharan Africa',
-    longitude:   15.0,
-    latitude:    14.0,
-    bbox:        [-17.0, 10.0, 40.0, 20.0],
-    color:       '#EF4444', // red
-  },
-  {
-    id:          'danube-basin',
-    name:        'Danube River Basin',
-    description: 'Central EU — seasonal snowmelt flood risk (spring peak)',
-    longitude:   22.0,
-    latitude:    47.5,
-    bbox:        [8.0, 42.0, 30.0, 52.0],
-    color:       '#3B82F6', // blue
-  },
-  {
-    id:          'po-valley',
-    name:        'Po Valley, Italy',
-    description: 'Northern Italy agricultural corridor — autumn flash flood risk',
-    longitude:   11.0,
-    latitude:    45.0,
-    bbox:        [6.5, 43.5, 14.5, 46.5],
-    color:       '#3B82F6', // blue
-  },
-  {
-    id:          'nile-delta',
-    name:        'Nile Delta',
-    description: 'Water stress, saltwater intrusion & seasonal Nile flood monitoring',
-    longitude:   31.0,
-    latitude:    30.5,
-    bbox:        [25.0, 22.0, 37.0, 32.0],
-    color:       '#F59E0B', // amber
+    id:          'pleven',
+    name:        'Pleven Oblast',
+    description: 'Northern Bulgaria — Danube floodplain flood risk; Vit, Osam & Iskur tributaries cross the oblast',
+    longitude:   24.62,
+    latitude:    43.41,
+    bbox:        [23.90, 43.15, 25.20, 43.70],
+    color:       '#3B82F6', // blue — flood risk
   },
 ];
 
-// ── Initial map viewport ───────────────────────────────────────────────────────
+// REGIONS_GEOJSON is imported from ./regions.geojson
+// Edit that file to update zone polygon boundaries without touching this file.
+
+// ── Mapbox layer descriptors (static objects — defined outside component) ─────
+// Fill layer: semi-transparent colour, brightens on hover via feature-state.
+const FILL_LAYER = {
+  id:     'regions-fill',
+  type:   'fill',
+  paint:  {
+    'fill-color':   ['get', 'color'],
+    'fill-opacity': [
+      'case',
+      ['boolean', ['feature-state', 'hover'], false], 0.45,
+      0.18,
+    ],
+  },
+};
+
+// Outline layer: solid border in the zone's colour, thickens on hover.
+const OUTLINE_LAYER = {
+  id:    'regions-outline',
+  type:  'line',
+  paint: {
+    'line-color': ['get', 'color'],
+    'line-width': [
+      'case',
+      ['boolean', ['feature-state', 'hover'], false], 3,
+      1.5,
+    ],
+    'line-opacity': 0.9,
+  },
+};
+
+// Selected outline: bright cyan pulse ring shown on the active zone.
+const SELECTED_LAYER = {
+  id:     'regions-selected',
+  type:   'line',
+  filter: ['==', ['get', 'id'], ''], // filter updated dynamically
+  paint:  {
+    'line-color':   '#67E8F9', // cyan-300
+    'line-width':   3,
+    'line-opacity': 1,
+    'line-dasharray': [2, 1],
+  },
+};
+
 const INITIAL_VIEW_STATE = {
-  longitude: 20.0,
-  latitude:  35.0,
-  zoom:      3.2,
+  longitude: 24.62,
+  latitude:  43.42,
+  zoom:      9.0,
 };
 
 // ── Simulated demo response (shown when the live API is unavailable) ──────────
@@ -89,19 +100,23 @@ const buildDemoResponse = (region) => ({
   status:     'FLOOD_WATCH',
   confidence: 0.78,
   reasoning:
-    '[DEMO MODE] River levels in this zone have risen 0.8 m above the seasonal ' +
-    'baseline over the past 72 hours. Soil saturation is at 89 %. Precipitation ' +
-    'forecast shows an additional 35 mm expected within 24 hours. Two of the ' +
-    'three FLOOD_WATCH thresholds are breached — elevated risk of flash flooding.',
+    '[DEMO MODE] River levels in the Vit and Osam rivers have risen 1.1 m above the seasonal ' +
+    'baseline over the past 72 hours. Soil saturation across Pleven Oblast is at 91 %. Precipitation ' +
+    'forecast shows an additional 38 mm expected within 24 hours. The Danube floodplain in the ' +
+    'Nikopol area is at elevated risk — two of three FLOOD_WATCH thresholds are breached.',
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
   // ── State ─────────────────────────────────────────────────────────────────
-  const [selectedRegion, setSelectedRegion] = useState(null); // region object
-  const [assessment,     setAssessment]     = useState(null); // Bedrock response
+  const [selectedRegion, setSelectedRegion] = useState(null);
+  const [assessment,     setAssessment]     = useState(null);
   const [isLoading,      setIsLoading]      = useState(false);
-  const [error,          setError]          = useState(null); // non-fatal warning
+  const [error,          setError]          = useState(null);
+  const [hoveredId,      setHoveredId]      = useState(null); // for hover feature-state
+
+  // mapRef lets us call map.setFeatureState for hover highlighting
+  const mapRef = useRef(null);
 
   // ── Fetch assessment from API Gateway → Lambda ────────────────────────────
   const fetchAssessment = useCallback(async (region) => {
@@ -149,6 +164,36 @@ export default function App() {
     setError(null);
   }, []);
 
+  // ── Hover handlers — update Mapbox feature-state for fill opacity/outline ─
+  const handleMouseEnter = useCallback((e) => {
+    if (!mapRef.current || !e.features?.length) return;
+    const map = mapRef.current.getMap();
+    const id  = e.features[0].id;
+    if (hoveredId !== null && hoveredId !== id) {
+      map.setFeatureState({ source: 'regions', id: hoveredId }, { hover: false });
+    }
+    map.setFeatureState({ source: 'regions', id }, { hover: true });
+    map.getCanvas().style.cursor = 'pointer';
+    setHoveredId(id);
+  }, [hoveredId]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (!mapRef.current || hoveredId === null) return;
+    const map = mapRef.current.getMap();
+    map.setFeatureState({ source: 'regions', id: hoveredId }, { hover: false });
+    map.getCanvas().style.cursor = '';
+    setHoveredId(null);
+  }, [hoveredId]);
+
+  // ── Map click — detect which zone was tapped/clicked ─────────────────────
+  const handleMapClick = useCallback((e) => {
+    if (!e.features?.length) return;
+    const regionId = e.features[0].properties.id;
+    const region   = REGIONS.find(r => r.id === regionId);
+    if (region) handleRegionClick(region);
+  }, [handleRegionClick]);
+
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="relative w-screen h-screen bg-gray-950 font-mono">
@@ -160,7 +205,7 @@ export default function App() {
           HydroTwin
         </h1>
         <span className="hidden sm:block text-xs text-gray-500">
-          CASSINI Space for Water · Multi-region Early Warning System
+          CASSINI Space for Water · Bulgaria Early Warning System
         </span>
 
         {/* Live pulse indicator */}
@@ -172,11 +217,15 @@ export default function App() {
 
       {/* ── Mapbox Map ────────────────────────────────────────────────────── */}
       <Map
+        ref={mapRef}
         mapboxAccessToken={MAPBOX_TOKEN}
         initialViewState={INITIAL_VIEW_STATE}
         style={{ width: '100%', height: '100%' }}
         mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
-        // Fog gives the globe-like atmosphere effect on satellite style
+        interactiveLayerIds={['regions-fill']}  // enables onClick + onMouseEnter per feature
+        onClick={handleMapClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         fog={{
           range:            [0.5, 10],
           color:            '#0c1a2e',
@@ -189,7 +238,20 @@ export default function App() {
         <NavigationControl position="bottom-right" />
         <ScaleControl      position="bottom-left"  unit="metric" />
 
-        {/* ── Region Markers ──────────────────────────────────────────────── */}
+        {/* ── Zone polygon overlays ───────────────────────────────────────── */}
+        <Source id="regions" type="geojson" data={REGIONS_GEOJSON}>
+          {/* Semi-transparent fill — brightens on hover */}
+          <Layer {...FILL_LAYER} />
+          {/* Coloured border */}
+          <Layer {...OUTLINE_LAYER} />
+          {/* Cyan dashed outline on the selected zone */}
+          <Layer
+            {...SELECTED_LAYER}
+            filter={['==', ['get', 'id'], selectedRegion?.id ?? '']}
+          />
+        </Source>
+
+        {/* ── Zone name labels — centred on each region ──────────────────── */}
         {REGIONS.map((region) => (
           <Marker
             key={region.id}
@@ -197,45 +259,20 @@ export default function App() {
             latitude={region.latitude}
             anchor="center"
           >
-            {/*
-             * The click handler lives on the <button> (not the Marker) so it
-             * works correctly in react-map-gl v7 without event propagation issues.
-             */}
-            <button
+            <div
               onClick={() => handleRegionClick(region)}
-              // 44×44px minimum touch target (WCAG 2.5.5) — critical for mobile
-              className="group relative flex items-center justify-center
-                         min-w-[44px] min-h-[44px] focus:outline-none"
-              title={region.name}
+              className="pointer-events-auto cursor-pointer select-none
+                         px-2 py-0.5 rounded text-[11px] font-bold
+                         text-white drop-shadow-lg
+                         transition-opacity duration-150"
+              style={{
+                textShadow: '0 0 6px #000, 0 0 3px #000',
+                opacity: hoveredId === region.id || selectedRegion?.id === region.id ? 1 : 0.75,
+              }}
               aria-label={`Assess ${region.name}`}
             >
-              {/* Pulse ring — animates continuously to draw attention */}
-              <span
-                className="absolute w-10 h-10 rounded-full opacity-25 animate-ping"
-                style={{ backgroundColor: region.color }}
-                aria-hidden="true"
-              />
-              {/* Core dot — highlighted on hover / when selected */}
-              <span
-                className={`
-                  relative w-5 h-5 rounded-full border-2 border-white shadow-lg
-                  cursor-pointer transition-transform duration-150
-                  group-hover:scale-125
-                  ${selectedRegion?.id === region.id ? 'scale-125 border-cyan-300' : ''}
-                `}
-                style={{ backgroundColor: region.color }}
-              />
-              {/* Hover label */}
-              <span
-                className="absolute top-7 left-1/2 -translate-x-1/2 whitespace-nowrap
-                           text-white text-[10px] font-semibold drop-shadow-lg
-                           bg-gray-900/80 px-1.5 py-0.5 rounded
-                           pointer-events-none
-                           opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              >
-                {region.name}
-              </span>
-            </button>
+              {region.name}
+            </div>
           </Marker>
         ))}
       </Map>
