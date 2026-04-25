@@ -1,7 +1,6 @@
 # HydroTwin 💧
 
 **Multi-region Flood & Drought Early Warning System**  
-CASSINI Space for Water Hackathon — 36-hour sprint
 
 ---
 
