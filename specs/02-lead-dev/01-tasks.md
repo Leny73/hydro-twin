@@ -6,11 +6,13 @@
 
 10 tasks. 4 blockers (🔴), 4 important (🟡), 2 nice-to-have (🟢).
 
-**Status (updated 2026-04-25 ~13:50):** LD-1, LD-2, LD-3, LD-4, LD-5, LD-7, LD-8 ✅ Done. LD-6 🟢 Implicitly verified (Discord HTTP 204 confirmed in CloudWatch on FLOOD_WATCH path; explicit FLOOD_WARNING red-embed test still pending). LD-9 scope changed to Bulgarian AOIs (1 of 3 done — `pleven` only). LD-10 not started.
+**Status (updated 2026-04-25 ~14:15):** LD-1, LD-2, LD-3, LD-4, LD-5, LD-7, LD-8, LD-9 ✅ Done. LD-6 🟢 Implicitly verified (FLOOD_WATCH embed delivered HTTP 204; explicit FLOOD_WARNING red-embed test pending after Anthropic form propagates). LD-10 handed off to frontend collaborator via `HANDOFF-3.md`. Vercel Preview env vars set ✅ (so friend's sparkline-branch preview will render the map).
 
 **🟡 External blockers in flight:**
 - **Anthropic use-case form** — submitted ~13:45 via AWS Console (Bedrock Playground prompt). Propagation up to ~15 min. Until then `/assess` returns canned `[DEMO MODE]` text. Re-test by curling `/assess` and confirming `reasoning` no longer starts with `[DEMO MODE`.
-- **Sentinel Hub credentials** (`SH_CLIENT_ID` / `SH_CLIENT_SECRET`) — without these the new `sentinel_extractor.py` skips real EO calls and returns empty data → Bedrock has no signal → falls back. Get from https://shapps.sentinel-hub.com.
+
+**✅ Cleared 2026-04-25 ~14:10:**
+- **Sentinel Hub credentials** (`SH_CLIENT_ID` / `SH_CLIENT_SECRET`) — pushed to `HydroTwin` Lambda env via merged `update-function-configuration` (existing `BEDROCK_*` + `DISCORD_WEBHOOK_URL` preserved). Next cold invoke will hit real Sentinel Hub APIs instead of returning empty data.
 
 **✅ Regression fixed 2026-04-25 ~13:48:**
 - `backend/subscribe_handler.py` `KNOWN_REGIONS` whitelist updated from the old 5 global IDs to `{"pleven"}` — matches `frontend/src/regions.geojson`. Deployed to both Lambdas. Verified live: `POST /subscribe {"region_id":"pleven"}` → HTTP 201, `{"region_id":"atlantis"}` → HTTP 400, legacy `{"region_id":"danube-basin"}` → HTTP 400 (intentionally — frontend no longer sends them).
@@ -102,22 +104,22 @@
 
 ## 🟢 Tier 3 — Nice-to-have (only if everything else done)
 
-### LD-9 — Add more Bulgarian AOIs (scope changed)  🟡 1 of 3 done
+### LD-9 — Add more Bulgarian AOIs  ✅ Done (scope frozen at Pleven-only)
 - **Priority:** 🟢
 - **Files:** `frontend/src/regions.geojson` + `frontend/src/App.jsx` `REGIONS` array + `backend/subscribe_handler.py` `KNOWN_REGIONS` whitelist
-- **What (revised):** the brief calls for **3 Bulgarian AOIs**. The merged work added **Pleven Oblast** as the first. Add 2 more to match the brief — likely candidates: Sofia Oblast (urban flash flood), Plovdiv (Maritsa River basin), or Burgas (coastal + river-mouth).
+- **Decision (2026-04-25 ~14:00):** Dimi froze the scope at **Pleven Oblast only**. The brief originally called for 3 BG AOIs but a focused single-zone pitch is cleaner — no need to dilute the demo with thin polygons. Pleven (Danube floodplain — Vit / Osam / Iskur) carries the narrative on its own.
 - **Acceptance criteria:**
   - [x] Pleven Oblast renders as polygon overlay (not a marker dot)
-  - [ ] 2 more Bulgarian regions added with polygon geometry in `regions.geojson`
-  - [ ] Each new `id` added to `subscribe_handler.KNOWN_REGIONS` whitelist
-  - [ ] Each region returns a valid assessment (Lambda is bbox-driven, so just needs a sensible bbox)
-- **Coordinate with:** Angela (pitch narrative — does the pitch reference 3 regions?), Elitsa (regional baselines for new AOIs in `meteorology_rules.md`).
+  - [x] `subscribe_handler.KNOWN_REGIONS` synced to `{"pleven"}` (whitelist regression fixed + redeployed ~13:48)
+  - [x] Pleven returns a valid assessment via Lambda
+- **Notes:** if Angela's pitch script references "3 zones," surface that mismatch — otherwise close this out.
 
-### LD-10 — Add time-series sparkline in `AlertPanel`  ⏳ Not started
+### LD-10 — Add time-series sparkline in `AlertPanel`  🤝 Handed off
 - **Priority:** 🟢
 - **Files:** `frontend/src/components/` (new component, e.g. `MetricsSparkline.jsx`)
 - **What:** Render a small SVG sparkline of recent sensor metrics (precipitation, river level) inside the assessment panel.
-- **Notes:** Requires the extractor to return historical arrays — `sentinel_extractor.py` currently returns single scalar values. Coordinate with Alexandre if needed.
+- **Owner (2026-04-25 ~14:00):** Dimi's frontend collaborator — see `HANDOFF-3.md` at repo root for full brief (stub data is fine, no chart libs, mounts inside `AlertPanel.jsx` between AI Reasoning and Metadata Footer).
+- **Notes:** Requires the extractor to return historical arrays — `sentinel_extractor.py` currently returns single scalar values. The handoff doc tells her to stub the series for now.
 
 ---
 
@@ -134,10 +136,19 @@
 - **Verify:** `curl -X POST https://sdnatb43dl.execute-api.us-east-1.amazonaws.com/assess -H 'Content-Type: application/json' -d '{"region_id":"pleven","bbox":[23.9,43.15,25.2,43.7]}'` — `reasoning` should no longer start with `[DEMO MODE`.
 - **Console retired:** "Model access" page is deprecated as of 2026 — serverless foundation models are auto-enabled per region; only Anthropic still requires the use-case form, triggered first time you select an Anthropic model in the Playground.
 
-### 🟡 Sentinel Hub credentials unset
-- **Symptom:** CloudWatch shows `SH_CLIENT_ID / SH_CLIENT_SECRET not set — skipping Sentinel Hub calls`. Real EO data is empty.
-- **Fix:** get OAuth client at https://shapps.sentinel-hub.com → User Settings → OAuth Clients → set on Lambda env: `SH_CLIENT_ID`, `SH_CLIENT_SECRET`. No code change needed.
-- **Impact:** even after Anthropic form approves, Bedrock will reason on empty sensor data → likely SAFE assessments. Real demo punch needs both.
+### ✅ [FIXED 2026-04-25 ~14:10] Sentinel Hub credentials pushed to Lambda
+- **Was:** CloudWatch showed `SH_CLIENT_ID / SH_CLIENT_SECRET not set — skipping Sentinel Hub calls`. Real EO data was empty.
+- **Fix shipped:** `SH_CLIENT_ID` + `SH_CLIENT_SECRET` added to `HydroTwin` Lambda env via Vercel-style merge update (read live env first, append the 2 new keys, push back via `update-function-configuration` — existing `BEDROCK_*` + `DISCORD_WEBHOOK_URL` preserved).
+- **Verify:** `/assess` invocation should no longer log `SH_CLIENT_ID not set` in CloudWatch.
+- **🔒 Post-pitch action:** rotate the OAuth client at https://shapps.sentinel-hub.com (creds were pasted in chat history).
+
+### ✅ [FIXED 2026-04-25 ~14:15] Vercel Preview env vars set
+- **Was:** only Production + Development envs had `VITE_MAPBOX_TOKEN` / `VITE_API_ENDPOINT`. Branch-deploy previews (e.g. friend's incoming sparkline PR) would render a blank map.
+- **Fix shipped:** both vars added via Vercel REST API (`POST /v10/projects/{id}/env` with `target: ["preview"]`, encrypted, no branch restriction → all preview branches inherit).
+  - `VITE_MAPBOX_TOKEN` = same value as Production
+  - `VITE_API_ENDPOINT` = `https://sdnatb43dl.execute-api.us-east-1.amazonaws.com/assess`
+- **Note:** the `vercel env add` CLI is currently broken in non-interactive mode (returns `action_required: git_branch_required` even with `--yes` and no branch arg). The REST API still supports "all preview branches" cleanly — used that instead.
+- **🔒 Post-pitch action:** revoke the deploy token at https://vercel.com/account/tokens (token was pasted in chat history).
 
 ### 🟡 Telegram unset (optional)
 - **Symptom:** `Telegram delivery skipped — TELEGRAM_BOT_TOKEN/CHAT_ID not set`.
