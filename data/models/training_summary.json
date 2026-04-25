@@ -1,0 +1,32 @@
+[
+  {
+    "target_name": "final_flood_score_log",
+    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_xgboost.json",
+    "metrics_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_metrics.csv",
+    "importance_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_feature_importance.csv",
+    "plot_path": "C:\\Users\\alexr\\hydro-twin\\data\\plots\\model_flood_prediction.png",
+    "metrics": {
+      "rows_test": 12,
+      "mae": 0.11268441376394132,
+      "rmse": 0.16496266148933622,
+      "r2": -0.14215778043024296,
+      "target_mean_test": 0.13654868330776224,
+      "target_std_test": 0.15435567582335652
+    }
+  },
+  {
+    "target_name": "final_drought_score_log",
+    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_xgboost.json",
+    "metrics_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_metrics.csv",
+    "importance_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_feature_importance.csv",
+    "plot_path": "C:\\Users\\alexr\\hydro-twin\\data\\plots\\model_drought_prediction.png",
+    "metrics": {
+      "rows_test": 12,
+      "mae": 0.15050894496533,
+      "rmse": 0.19159028321761387,
+      "r2": -2.1438350552516248,
+      "target_mean_test": 0.13204158924410836,
+      "target_std_test": 0.10805468541734929
+    }
+  }
+]
