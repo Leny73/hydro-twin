@@ -15,11 +15,13 @@
  *   VITE_API_ENDPOINT  – API Gateway endpoint URL
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Map, { Source, Layer, Marker, NavigationControl, ScaleControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import AlertPanel from './components/AlertPanel';
 import REGIONS_GEOJSON from './regions.geojson';
+import HISTORICAL_EVENTS from './data/historicalEvents.json';
+import { fetchHistoricalAssessment } from './lib/openmeteo';
 
 // ── API / Token configuration ─────────────────────────────────────────────────
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
@@ -115,6 +117,75 @@ export default function App() {
   const [error,          setError]          = useState(null);
   const [hoveredId,      setHoveredId]      = useState(null); // for hover feature-state
 
+  // ── Replay state (two mutually exclusive modes) ──────────────────────────
+  // 'archive'  → user picked a calendar date → real OpenMeteo fetch
+  // 'curated'  → user picked an event chip   → pre-baked snapshot
+  const [replayDate,         setReplayDate]         = useState(null); // ISO YYYY-MM-DD
+  const [replayCuratedEvent, setReplayCuratedEvent] = useState(null); // event object
+  const [replayAssessment,   setReplayAssessment]   = useState(null); // archive-mode synthesised
+  const [replayLoading,      setReplayLoading]      = useState(false);
+  const [replayError,        setReplayError]        = useState(null);
+
+  // Curated events available for the selected region.
+  const regionEvents = useMemo(() => {
+    if (!selectedRegion) return [];
+    return HISTORICAL_EVENTS[selectedRegion.id] ?? [];
+  }, [selectedRegion]);
+
+  // When replayDate is set, fetch OpenMeteo Historical and build a synthetic
+  // assessment with the same shape as the live API response.
+  useEffect(() => {
+    if (!replayDate || !selectedRegion) {
+      setReplayAssessment(null);
+      setReplayError(null);
+      return;
+    }
+    let cancelled = false;
+    setReplayLoading(true);
+    setReplayError(null);
+
+    fetchHistoricalAssessment({
+      longitude:  selectedRegion.longitude,
+      latitude:   selectedRegion.latitude,
+      replayDate,
+      regionId:   selectedRegion.id,
+      regionName: selectedRegion.name,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setReplayAssessment(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[HydroTwin] OpenMeteo fetch failed:', err.message);
+        setReplayError('Could not load archive data — try a different date.');
+        setReplayAssessment(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReplayLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [replayDate, selectedRegion]);
+
+  // Displayed assessment: curated > archive > live (priority order).
+  const displayedAssessment = useMemo(() => {
+    if (replayCuratedEvent) {
+      return {
+        region_id:   replayCuratedEvent.regionId,
+        status:      replayCuratedEvent.severity,
+        confidence:  replayCuratedEvent.confidence,
+        reasoning:   replayCuratedEvent.reasoning,
+        replay:      true,
+        replay_kind: 'curated',
+        replay_date: replayCuratedEvent.peakDate,
+        curated:     replayCuratedEvent,
+      };
+    }
+    if (replayDate) return replayAssessment;
+    return assessment;
+  }, [replayCuratedEvent, replayDate, replayAssessment, assessment]);
+
   // mapRef lets us call map.setFeatureState for hover highlighting
   const mapRef = useRef(null);
 
@@ -154,6 +225,8 @@ export default function App() {
   // ── Region marker click handler ───────────────────────────────────────────
   const handleRegionClick = useCallback((region) => {
     setSelectedRegion(region);
+    setReplayDate(null);          // exit any replay mode
+    setReplayCuratedEvent(null);
     fetchAssessment(region);
   }, [fetchAssessment]);
 
@@ -162,13 +235,43 @@ export default function App() {
     setSelectedRegion(null);
     setAssessment(null);
     setError(null);
+    setReplayDate(null);
+    setReplayCuratedEvent(null);
+  }, []);
+
+  // ── Replay handlers — mutually exclusive ─────────────────────────────────
+  // Calendar pick: if the date falls inside a curated event's window, activate
+  // that chip (pre-baked data, accurate for basin-driven floods) while keeping
+  // the user's chosen date in the picker. Otherwise use OpenMeteo archive.
+  const handleReplayDateChange = useCallback((iso) => {
+    if (iso && selectedRegion) {
+      const events = HISTORICAL_EVENTS[selectedRegion.id] ?? [];
+      const matched = events.find((ev) => iso >= ev.dateStart && iso <= ev.dateEnd);
+      if (matched) {
+        setReplayDate(iso);
+        setReplayCuratedEvent(matched);
+        return;
+      }
+    }
+    setReplayDate(iso);
+    setReplayCuratedEvent(null);
+  }, [selectedRegion]);
+
+  // Curated chip pick: switches to curated mode and clears any archive date.
+  // Re-clicking the active chip (event === null) exits replay entirely.
+  const handleCuratedEventSelect = useCallback((event) => {
+    setReplayCuratedEvent(event);
+    setReplayDate(null);
   }, []);
 
   // ── Hover handlers — update Mapbox feature-state for fill opacity/outline ─
+  // Mapbox's setFeatureState requires a defined feature id; the GeoJSON source
+  // is loaded with generateId so each feature gets a numeric id at render time.
   const handleMouseEnter = useCallback((e) => {
     if (!mapRef.current || !e.features?.length) return;
+    const id = e.features[0].id;
+    if (id === undefined || id === null) return;
     const map = mapRef.current.getMap();
-    const id  = e.features[0].id;
     if (hoveredId !== null && hoveredId !== id) {
       map.setFeatureState({ source: 'regions', id: hoveredId }, { hover: false });
     }
@@ -178,7 +281,7 @@ export default function App() {
   }, [hoveredId]);
 
   const handleMouseLeave = useCallback(() => {
-    if (!mapRef.current || hoveredId === null) return;
+    if (!mapRef.current || hoveredId === null || hoveredId === undefined) return;
     const map = mapRef.current.getMap();
     map.setFeatureState({ source: 'regions', id: hoveredId }, { hover: false });
     map.getCanvas().style.cursor = '';
@@ -239,7 +342,7 @@ export default function App() {
         <ScaleControl      position="bottom-left"  unit="metric" />
 
         {/* ── Zone polygon overlays ───────────────────────────────────────── */}
-        <Source id="regions" type="geojson" data={REGIONS_GEOJSON}>
+        <Source id="regions" type="geojson" data={REGIONS_GEOJSON} generateId>
           {/* Semi-transparent fill — brightens on hover */}
           <Layer {...FILL_LAYER} />
           {/* Coloured border */}
@@ -280,10 +383,15 @@ export default function App() {
       {/* ── AI Assessment Panel (bottom sheet on mobile, sidebar on desktop) ── */}
       <AlertPanel
         region={selectedRegion}
-        assessment={assessment}
-        isLoading={isLoading}
-        error={error}
+        assessment={displayedAssessment}
+        isLoading={replayCuratedEvent ? false : (replayDate ? replayLoading : isLoading)}
+        error={replayDate ? replayError : (replayCuratedEvent ? null : error)}
         onClose={closePanel}
+        replayDate={replayDate}
+        onReplayDateChange={handleReplayDateChange}
+        curatedEvents={regionEvents}
+        replayCuratedEvent={replayCuratedEvent}
+        onCuratedEventSelect={handleCuratedEventSelect}
       />
 
       {/* ── Click-to-start hint (only visible before first selection) ─────── */}

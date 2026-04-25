@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import MetricsSparkline from './MetricsSparkline';
+import DatePicker from './DatePicker';
+import CuratedEventChips from './CuratedEventChips';
 
 // ── Markdown renderer overrides for the `reasoning` field ─────────────────────
 // The Lambda asks Claude to return reasoning as light markdown (bold, bullets).
@@ -26,11 +28,16 @@ const MD_COMPONENTS = {
  *   Desktop (≥640px) : fixed-width right sidebar (original design).
  *
  * Props:
- *   region     – currently selected region object (null = panel hidden)
- *   assessment – { status, confidence, reasoning, region_id } from Lambda
- *   isLoading  – bool, true while fetch is in-flight
- *   error      – string | null, non-fatal warning message
- *   onClose    – callback to dismiss the panel and return to the map
+ *   region                – currently selected region object (null = panel hidden)
+ *   assessment            – { status, confidence, reasoning, region_id, replay?, replay_kind?, replay_date? }
+ *   isLoading             – bool, true while fetch is in-flight
+ *   error                 – string | null, non-fatal warning message
+ *   onClose               – callback to dismiss the panel and return to the map
+ *   replayDate            – ISO YYYY-MM-DD string, or null
+ *   onReplayDateChange    – (iso | null) => void
+ *   curatedEvents         – array of curated reference events for the region
+ *   replayCuratedEvent    – currently active curated event, or null
+ *   onCuratedEventSelect  – (event | null) => void
  */
 
 // ── Status metadata: maps each alert code to display properties ───────────────
@@ -54,15 +61,20 @@ function confidenceColor(pct) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function AlertPanel({ region, assessment, isLoading, error, onClose }) {
-  // Panel is invisible until a region has been selected (or a load is in-flight)
-  if (!region && !isLoading) return null;
-
-  const meta    = STATUS_META[assessment?.status] ?? DEFAULT_META;
-  const pct     = assessment ? Math.round((assessment.confidence ?? 0) * 100) : 0;
-  const isAlert = ['DROUGHT_WARNING', 'FLOOD_WARNING'].includes(assessment?.status);
-
+export default function AlertPanel({
+  region,
+  assessment,
+  isLoading,
+  error,
+  onClose,
+  replayDate           = null,
+  onReplayDateChange   = () => {},
+  curatedEvents        = [],
+  replayCuratedEvent   = null,
+  onCuratedEventSelect = () => {},
+}) {
   // ── Subscribe form state ──────────────────────────────────────────────────
+  // Hooks must be declared unconditionally — keep them above any early return.
   const [formOpen,   setFormOpen]   = useState(false);
   const [email,      setEmail]      = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -76,6 +88,16 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
     setSubmitting(false);
     setToast(null);
   }, [region?.id]);
+
+  // Panel is invisible until a region has been selected (or a load is in-flight)
+  if (!region && !isLoading) return null;
+
+  const meta       = STATUS_META[assessment?.status] ?? DEFAULT_META;
+  const pct        = assessment ? Math.round((assessment.confidence ?? 0) * 100) : 0;
+  const isAlert    = ['DROUGHT_WARNING', 'FLOOD_WARNING'].includes(assessment?.status);
+  const replayKind = assessment?.replay_kind ?? null;        // 'archive' | 'curated' | null
+  const isReplay   = Boolean(replayDate || replayCuratedEvent);
+  const isCurated  = replayKind === 'curated';
 
   const closeForm = () => {
     setFormOpen(false);
@@ -179,6 +201,50 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
 
       <hr className="border-gray-700/60" />
 
+      {/* ── Date Picker — pick any past day for real archive data ─────────── */}
+      {/* Reflects the active replay date OR the active curated event's peak date,
+          so the input always shows what the panel is rendering. Clearing the
+          input exits replay mode entirely (parent handler clears both). */}
+      <DatePicker
+        value={replayDate ?? replayCuratedEvent?.peakDate ?? null}
+        onChange={onReplayDateChange}
+      />
+
+      {/* ── Curated event chips — pre-baked snapshots ─────────────────────── */}
+      {curatedEvents.length > 0 && (
+        <CuratedEventChips
+          events={curatedEvents}
+          selectedEventId={replayCuratedEvent?.id ?? null}
+          onSelect={onCuratedEventSelect}
+        />
+      )}
+
+      {/* ── Replay banner — visual differs by replay_kind ─────────────────── */}
+      {isReplay && replayKind && (
+        <div
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg
+                      text-[11px] leading-relaxed border
+                      ${isCurated
+                        ? 'bg-cyan-950/50 border-cyan-700/70 text-cyan-100'
+                        : 'bg-purple-950/50 border-purple-700/70 text-purple-100'}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span aria-hidden="true">{isCurated ? '📚' : '📡'}</span>
+          <span className="flex-1">
+            <strong className="text-white">
+              {isCurated ? 'Curated reference' : 'Live archive'}
+            </strong>
+            {' — '}
+            {isCurated
+              ? assessment?.curated?.name
+              : new Date(`${replayDate}T00:00:00Z`).toLocaleDateString('en-GB', {
+                  day: 'numeric', month: 'short', year: 'numeric',
+                })}
+          </span>
+        </div>
+      )}
+
       {/* ── Loading Skeleton ──────────────────────────────────────────────── */}
       {isLoading && (
         <div className="flex flex-col gap-3 animate-pulse" aria-busy="true" aria-label="Loading assessment">
@@ -196,8 +262,8 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
       {/* ── Assessment Results ────────────────────────────────────────────── */}
       {!isLoading && assessment && (
         <>
-          {/* ── Subscribe CTA  →  expands to inline form ──────────────────── */}
-          {!formOpen ? (
+          {/* ── Subscribe CTA — hidden in replay mode ─────────────────────── */}
+          {!isReplay && (!formOpen ? (
             <button
               onClick={() => { setToast(null); setFormOpen(true); }}
               className={`
@@ -265,10 +331,10 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
                 </button>
               </div>
             </form>
-          )}
+          ))}
 
-          {/* ── Toast: success / error feedback (paired with Subscribe) ───── */}
-          {toast && (
+          {/* ── Toast: success / error feedback (paired with Subscribe) — hidden in replay ─ */}
+          {!isReplay && toast && (
             <div
               role={toast.kind === 'error' ? 'alert' : 'status'}
               aria-live="polite"
@@ -325,9 +391,13 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
           {/* ── AI Reasoning ──────────────────────────────────────────────── */}
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-              AI Reasoning{' '}
+              {isReplay ? 'Event Reconstruction' : 'AI Reasoning'}{' '}
               <span className="text-cyan-500 normal-case tracking-normal font-normal">
-                — Claude Sonnet 4.6 · Bedrock
+                {isCurated
+                  ? '— Curated reference narrative (NIMH archive)'
+                  : isReplay
+                  ? '— Derived from ERA5 reanalysis'
+                  : '— Claude Sonnet 4.6 · Bedrock'}
               </span>
             </p>
             <blockquote className="text-xs text-gray-200 leading-relaxed bg-gray-800/60 p-3 rounded-lg border border-gray-700/60">
@@ -342,11 +412,48 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
 
           {/* ── Metadata Footer ───────────────────────────────────────────── */}
           <div className="text-[10px] text-gray-500 bg-gray-800/30 rounded-md p-2.5 border border-gray-800/60 leading-relaxed">
-            <span className="text-gray-400">Data:</span>{' '}
-            Copernicus EO (Sentinel-1/2) + OpenMeteo
-            <br />
-            <span className="text-gray-400">Assessed:</span>{' '}
-            {new Date().toUTCString()}
+            {isCurated ? (
+              <>
+                <span className="text-gray-400">Data:</span>{' '}
+                Curated reference snapshot (NIMH / EMS archive — pending verification)
+                <br />
+                <span className="text-gray-400">Event:</span>{' '}
+                {assessment?.curated?.name}
+                <br />
+                <span className="text-gray-400">Peak date:</span>{' '}
+                {new Date(`${assessment.replay_date}T00:00:00Z`).toUTCString()}
+                {assessment?.curated?.sourceUrl && (
+                  <>
+                    <br />
+                    <span className="text-gray-400">Source:</span>{' '}
+                    <a
+                      href={assessment.curated.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-cyan-400 underline"
+                    >
+                      {assessment.curated.emsActivationId ?? 'reference'}
+                    </a>
+                  </>
+                )}
+              </>
+            ) : isReplay ? (
+              <>
+                <span className="text-gray-400">Data:</span>{' '}
+                OpenMeteo Historical Archive (ERA5 reanalysis)
+                <br />
+                <span className="text-gray-400">Replay date:</span>{' '}
+                {new Date(`${replayDate}T00:00:00Z`).toUTCString()}
+              </>
+            ) : (
+              <>
+                <span className="text-gray-400">Data:</span>{' '}
+                Copernicus EO (Sentinel-1/2) + OpenMeteo
+                <br />
+                <span className="text-gray-400">Assessed:</span>{' '}
+                {new Date().toUTCString()}
+              </>
+            )}
           </div>
 
         </>
