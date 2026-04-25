@@ -33,6 +33,14 @@
 |---|----------|-----------------|
 | 9 | **For LD-10 (sparkline) — can you return historical arrays too?** | Sparkline needs `precip_history_30d: float[]` etc. Only worth it if Tier 1+2 are done. |
 
+### 📼 History replay (added 2026-04-25 — see `../06-history-replay/01-design.md`)
+
+| # | Question | Why you need it |
+|---|----------|-----------------|
+| 10 | **Can `get_eo_and_weather_data(bbox, replay_date: str \| None = None)` accept an optional ISO date?** When set, route to OpenMeteo Historical API + Sentinel archive instead of live endpoints. **Return-dict schema must stay identical** (10 keys). | This unlocks Tier B of the history-replay feature (real EO reconstruction of past floods). Without it, we ship Tier A only — pre-baked snapshots in a frontend JSON. |
+| 11 | **Does Sentinel Hub OAuth allow archive queries with arbitrary `time` ranges**, or do we need a different credential scope? | If credentials are forecast-only, we drop Tier B entirely. Lock this before I waste time on the Lambda passthrough. |
+| 12 | **Realistic latency of a `replay_date` extraction?** (archive S1 GRD + OpenMeteo Historical) | If >25s, replay needs to be async or pre-cached. If <15s, fits in current 30s Lambda timeout. |
+
 ---
 
 ## 🌦️ For the Meteorologist (Elitsa Ilieva)
@@ -53,6 +61,14 @@
 |---|----------|-----------------|
 | 4 | **Confirm she understands the file is injected verbatim into the LLM prompt** — no front-matter, no HTML, plain Markdown only. | Friendly check — if she pastes in something from Word it might wreck the prompt. |
 | 5 | **Format check:** the file is loaded with `open(RULES_FILE, "r", encoding="utf-8")`. Any non-UTF-8 chars (smart quotes, em dashes from Word) might display weirdly to Claude. | Cosmetic but worth a heads-up. |
+
+### 📼 History replay (added 2026-04-25 — see `../06-history-replay/01-design.md`)
+
+| # | Question | Why you need it |
+|---|----------|-----------------|
+| 6 | **Can you confirm the 5 most significant verified flood/drought events for the Pleven AOI** (date range, severity using our 5 status codes, 1-line summary, NIMH or EMS source)? Candidates I'm pre-filling: 2014-08 Mizia/Vit floods, 2005 Danube floods, 2010 spring floods — please confirm/correct/replace. | Drives the dropdown content. Without verified events, the demo replay isn't defensible to the jury. |
+| 7 | **Are there other Bulgarian AOIs (Sofia? Varna?) we should add** beyond Pleven, and what are their canonical past events? | Brief mentions 3 Bulgarian AOIs. Pleven is the only confirmed one today. |
+| 8 | **For each event: what would the threshold matrix have classified it as at peak** (`FLOOD_WATCH` vs `FLOOD_WARNING`)? | The pre-baked snapshot's `severity` field has to match what the rules would output, otherwise the replay narrative is internally inconsistent. |
 
 ---
 

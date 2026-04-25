@@ -21,6 +21,8 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import AlertPanel from './components/AlertPanel';
 import MapLegend from './components/MapLegend';
 import REGIONS_GEOJSON from './regions.geojson';
+import HISTORICAL_EVENTS from './data/historicalEvents.json';
+import { fetchHistoricalAssessment } from './lib/openmeteo';
 import MUNICIPALITIES_GEOJSON from './municipalities.geojson';
 
 // ── API / Token configuration ─────────────────────────────────────────────────
@@ -225,6 +227,75 @@ export default function App() {
   // Municipality on-demand assessment cache (keyed by GID_2)
   const [muniStatuses, setMuniStatuses] = useState({});
 
+  // ── Replay state (two mutually exclusive modes) ──────────────────────────
+  // 'archive'  → user picked a calendar date → real OpenMeteo fetch
+  // 'curated'  → user picked an event chip   → pre-baked snapshot
+  const [replayDate,         setReplayDate]         = useState(null); // ISO YYYY-MM-DD
+  const [replayCuratedEvent, setReplayCuratedEvent] = useState(null); // event object
+  const [replayAssessment,   setReplayAssessment]   = useState(null); // archive-mode synthesised
+  const [replayLoading,      setReplayLoading]      = useState(false);
+  const [replayError,        setReplayError]        = useState(null);
+
+  // Curated events available for the selected region.
+  const regionEvents = useMemo(() => {
+    if (!selectedRegion) return [];
+    return HISTORICAL_EVENTS[selectedRegion.id] ?? [];
+  }, [selectedRegion]);
+
+  // When replayDate is set, fetch OpenMeteo Historical and build a synthetic
+  // assessment with the same shape as the live API response.
+  useEffect(() => {
+    if (!replayDate || !selectedRegion) {
+      setReplayAssessment(null);
+      setReplayError(null);
+      return;
+    }
+    let cancelled = false;
+    setReplayLoading(true);
+    setReplayError(null);
+
+    fetchHistoricalAssessment({
+      longitude:  selectedRegion.longitude,
+      latitude:   selectedRegion.latitude,
+      replayDate,
+      regionId:   selectedRegion.id,
+      regionName: selectedRegion.name,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setReplayAssessment(result);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[HydroTwin] OpenMeteo fetch failed:', err.message);
+        setReplayError('Could not load archive data — try a different date.');
+        setReplayAssessment(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReplayLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [replayDate, selectedRegion]);
+
+  // Displayed assessment: curated > archive > live (priority order).
+  const displayedAssessment = useMemo(() => {
+    if (replayCuratedEvent) {
+      return {
+        region_id:   replayCuratedEvent.regionId,
+        status:      replayCuratedEvent.severity,
+        confidence:  replayCuratedEvent.confidence,
+        reasoning:   replayCuratedEvent.reasoning,
+        replay:      true,
+        replay_kind: 'curated',
+        replay_date: replayCuratedEvent.peakDate,
+        curated:     replayCuratedEvent,
+      };
+    }
+    if (replayDate) return replayAssessment;
+    return assessment;
+  }, [replayCuratedEvent, replayDate, replayAssessment, assessment]);
+
   // V2-2: pre-computed status snapshot (one entry per region from /status)
   const [regionStatuses,    setRegionStatuses]    = useState([]);
   const [statusGeneratedAt, setStatusGeneratedAt] = useState(null);
@@ -371,6 +442,8 @@ export default function App() {
   // (initial load still in flight, /status fetch failed, or first-ever run).
   const handleRegionClick = useCallback((region) => {
     setSelectedRegion(region);
+    setReplayDate(null);          // exit any replay mode
+    setReplayCuratedEvent(null);
     setError(null);
 
     const cached = regionStatuses.find(s => s.region_id === region.id);
@@ -394,12 +467,36 @@ export default function App() {
     setSelectedRegion(null);
     setAssessment(null);
     setError(null);
+    setReplayDate(null);
+    setReplayCuratedEvent(null);
+  }, []);
+
+  // ── Replay handlers — mutually exclusive ─────────────────────────────────
+  // Calendar pick: if the date falls inside a curated event's window, activate
+  // that chip (pre-baked data, accurate for basin-driven floods) while keeping
+  // the user's chosen date in the picker. Otherwise use OpenMeteo archive.
+  const handleReplayDateChange = useCallback((iso) => {
+    if (iso && selectedRegion) {
+      const events = HISTORICAL_EVENTS[selectedRegion.id] ?? [];
+      const matched = events.find((ev) => iso >= ev.dateStart && iso <= ev.dateEnd);
+      if (matched) {
+        setReplayDate(iso);
+        setReplayCuratedEvent(matched);
+        return;
+      }
+    }
+    setReplayDate(iso);
+    setReplayCuratedEvent(null);
+  }, [selectedRegion]);
+
+  // Curated chip pick: switches to curated mode and clears any archive date.
+  // Re-clicking the active chip (event === null) exits replay entirely.
+  const handleCuratedEventSelect = useCallback((event) => {
+    setReplayCuratedEvent(event);
+    setReplayDate(null);
   }, []);
 
   // ── Hover handler — single mousemove is more reliable than enter/leave ──
-  // onMouseEnter/Leave misfires between adjacent polygons (leave fires before
-  // enter on the next feature). onMouseMove fires every frame and e.features
-  // always reflects what's actually under the cursor.
   const handleMouseMove = useCallback((e) => {
     if (!mapRef.current) return;
     const map = mapRef.current.getMap();
@@ -407,14 +504,12 @@ export default function App() {
     const id = feature?.id ?? null;
 
     if (id !== hoveredMuniIdRef.current) {
-      // Clear previous
       if (hoveredMuniIdRef.current !== null) {
         map.setFeatureState(
           { source: 'municipalities', id: hoveredMuniIdRef.current },
           { hover: false }
         );
       }
-      // Set new
       if (id !== null) {
         map.setFeatureState({ source: 'municipalities', id }, { hover: true });
       }
@@ -515,7 +610,7 @@ export default function App() {
         </Source>
 
         {/* ── Zone polygon overlays — painted by current status (V2-2) ───── */}
-        <Source id="regions" type="geojson" data={paintedRegions}>
+        <Source id="regions" type="geojson" data={paintedRegions} generateId>
           {/* Semi-transparent fill — brightens on hover */}
           <Layer {...FILL_LAYER} />
           {/* Coloured border */}
@@ -556,10 +651,15 @@ export default function App() {
       {/* ── AI Assessment Panel (bottom sheet on mobile, sidebar on desktop) ── */}
       <AlertPanel
         region={selectedRegion}
-        assessment={assessment}
-        isLoading={isLoading}
-        error={error}
+        assessment={displayedAssessment}
+        isLoading={replayCuratedEvent ? false : (replayDate ? replayLoading : isLoading)}
+        error={replayDate ? replayError : (replayCuratedEvent ? null : error)}
         onClose={closePanel}
+        replayDate={replayDate}
+        onReplayDateChange={handleReplayDateChange}
+        curatedEvents={regionEvents}
+        replayCuratedEvent={replayCuratedEvent}
+        onCuratedEventSelect={handleCuratedEventSelect}
       />
 
       {/* ── Click-to-start hint (only visible before first selection) ─────── */}
