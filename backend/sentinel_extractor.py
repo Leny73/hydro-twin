@@ -1,3 +1,7 @@
+from backend.sentinel_extractor.sentinel_1_extractor import get_vv_vh_logratio
+from backend.sentinel_extractor.sentinel_2_extractor import get_ndvi
+
+
 """
 sentinel_extractor.py — Earth Observation & Weather Data Stub
 =============================================================
@@ -77,11 +81,18 @@ def get_eo_and_weather_data(bbox: list) -> dict:
         }
     """
 
-    # ── ⚠️  DUMMY DATA — analysts must replace this with real API calls ──────
     _ = bbox  # suppress unused-variable warning until bbox is actually used
 
+    
+    ndvi=get_ndvi()
+    print(ndvi)
+
+    vv_vh_logratio=get_vv_vh_logratio()
+    print(vv_vh_logratio)
+
+
     return {
-        "ndvi":              0.42,
+        "ndvi":              0.42 if ndvi is None else ndvi,
         "soil_moisture_pct": 28.5,
         "precip_mm_7d":      12.0,
         "precip_mm_30d":     45.0,
