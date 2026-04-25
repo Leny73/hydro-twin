@@ -1,5 +1,5 @@
-from backend.sentinel_extractor.sentinel_1_extractor import get_vv_vh_logratio
-from backend.sentinel_extractor.sentinel_2_extractor import get_ndvi
+from sentinel_extractor.sentinel_1_extractor import get_vv_vh_logratio
+from sentinel_extractor.sentinel_2_extractor import get_ndvi
 
 
 """
