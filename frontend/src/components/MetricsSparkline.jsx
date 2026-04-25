@@ -32,14 +32,16 @@ export default function MetricsSparkline({
 }) {
   if (!data || data.length < 2) return null;
 
-  const min   = Math.min(...data);
-  const max   = Math.max(...data);
-  const range = max - min || 1;   // guard against a flat series
+  const min = Math.min(...data);
+  const max = Math.max(...data);
 
   const stepX  = (VB_W - 2 * PAD_X) / (data.length - 1);
   const points = data.map((v, i) => {
     const x = PAD_X + i * stepX;
-    const y = PAD_Y + (1 - (v - min) / range) * (VB_H - 2 * PAD_Y);
+    // Flat series: render the line vertically centered instead of pinned
+    // to the bottom of the viewBox (which is what (v - min) / 0 → NaN → 0 would give).
+    const norm = max === min ? 0.5 : (v - min) / (max - min);
+    const y    = PAD_Y + (1 - norm) * (VB_H - 2 * PAD_Y);
     return [x, y];
   });
 
@@ -56,9 +58,9 @@ export default function MetricsSparkline({
 
   return (
     <div>
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-        <span>{label}</span>
-        <span className={`${trendColor} normal-case tracking-normal text-[11px] font-bold`}>
+      <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
+        <span className="truncate min-w-0">{label}</span>
+        <span className={`${trendColor} normal-case tracking-normal text-[11px] font-bold whitespace-nowrap flex-shrink-0`}>
           {trendArrow} {last}{unit ? ` ${unit}` : ''}
         </span>
       </div>
