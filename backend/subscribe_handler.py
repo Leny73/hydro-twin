@@ -42,6 +42,8 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
+from regions import KNOWN_REGIONS
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -50,11 +52,8 @@ logger.setLevel(logging.INFO)
 SUBSCRIPTIONS_TABLE = os.environ.get("SUBSCRIPTIONS_TABLE", "HydroTwinSubscriptions")
 AWS_REGION          = os.environ.get("AWS_REGION", "us-east-1")
 
-# Region whitelist — MUST stay in sync with frontend/src/regions.geojson feature ids
-# (and frontend/src/App.jsx REGIONS[].id). Adding a region requires updating both sites.
-KNOWN_REGIONS = frozenset({
-    "pleven",
-})
+# Region whitelist sourced from backend/regions.py — single source of truth.
+# Sync with frontend/src/regions.geojson + frontend/src/App.jsx REGIONS[].id when adding regions.
 
 # Loose RFC-ish email regex — strict validation belongs to a verification email,
 # not a synchronous API call.

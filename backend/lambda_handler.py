@@ -33,6 +33,7 @@ import re
 import boto3
 import requests
 
+from regions import REGION_NAMES
 from sentinel_extractor import get_eo_and_weather_data
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ RULES_FILE = os.path.join(os.path.dirname(__file__), "meteorology_rules.md")
 #  AWS BEDROCK — Claude 3 Assessment
 # ─────────────────────────────────────────────────────────────────────────────
 
-def call_bedrock_agent(data: dict, rules: str) -> dict:
+def call_bedrock_agent(data: dict, rules: str, region_name: str) -> dict:
     """
     Send a structured prompt to AWS Bedrock (Claude 3 Sonnet) and return
     a risk assessment dict.
@@ -70,8 +71,12 @@ def call_bedrock_agent(data: dict, rules: str) -> dict:
     into the system context so the model reasons against validated thresholds.
 
     Args:
-        data:  dict from get_eo_and_weather_data() — EO + weather metrics.
-        rules: raw string content of meteorology_rules.md.
+        data:        dict from get_eo_and_weather_data() — EO + weather metrics.
+        rules:       raw string content of meteorology_rules.md.
+        region_name: human-readable region name (e.g. "Yambol Oblast") so the
+                     reasoning text refers to the correct place. The rules file
+                     is Pleven-calibrated, so without this Claude tends to say
+                     "Pleven Oblast" for every region.
 
     Returns:
         dict with keys:
@@ -92,6 +97,13 @@ emergency-response coordinators. They are smart non-experts; they do not know wh
 SPI, SAR or NDWI mean. Translate everything into plain language.
 
 You are powered by Copernicus Earth Observation satellite data and real-time weather feeds.
+
+=== REGION UNDER ASSESSMENT ===
+{region_name}
+
+The thresholds in the rules below are calibrated against Bulgarian climatological norms.
+Apply them to the sensor data for {region_name} as supplied. Do NOT assume the region is
+Pleven Oblast or any other place — the rules are general Bulgaria-wide unless stated.
 
 === METEOROLOGY RULES & THRESHOLDS (authoritative — do not override) ===
 {rules}
@@ -115,6 +127,7 @@ Schema:
 WRITING RULES for the `reasoning` field:
 - Format: markdown. Use **bold** to highlight 1–2 key numbers. Use a short bullet list (`- item`) only if you need to list 2+ breached conditions.
 - Open with a one-sentence headline summarising what's happening — NO jargon.
+- When you name the region, ONLY refer to it as "{region_name}" or generically as "the area" / "this region". DO NOT name a different oblast, river, or town that isn't in the sensor data — even if the rules file mentions one as an example.
 - Then explain which 1–3 readings drove the decision in everyday terms.
   Good: "soil is unusually dry at **10%**, well below the safe 15–75% range".
   Bad:  "soil_moisture_pct below DROUGHT_WATCH threshold of 20%".
@@ -269,6 +282,49 @@ def _send_telegram(emoji: str, status: str, region: str, conf: int, reason: str)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  CORE PIPELINE — reusable by cron + API
+# ─────────────────────────────────────────────────────────────────────────────
+
+def assess_region(region_id: str, bbox: list) -> dict:
+    """
+    Run the full assess pipeline for one region — extractor → rules → Bedrock.
+
+    No side effects (no webhook firing). Callers decide when to notify:
+      - lambda_handler (POST /assess): fires on every non-SAFE status
+      - cron_handler   (EventBridge):  fires only on status-code transition
+
+    Returns:
+        dict with keys: region_id, status, confidence, reasoning, sources
+    """
+    logger.info("Fetching EO data for bbox: %s", bbox)
+    eo_data = get_eo_and_weather_data(bbox)
+
+    try:
+        with open(RULES_FILE, "r", encoding="utf-8") as fh:
+            rules_text = fh.read()
+        logger.info("Loaded meteorology_rules.md (%d chars)", len(rules_text))
+    except FileNotFoundError:
+        rules_text = (
+            "Rules file not found. Apply conservative defaults:\n"
+            "- River level rise > 0.5 m in 7 days → FLOOD_WATCH\n"
+            "- Soil moisture < 15% + NDVI < 0.2   → DROUGHT_WATCH\n"
+        )
+        logger.warning("meteorology_rules.md not found — using built-in fallback rules.")
+
+    logger.info("Invoking Bedrock model: %s", BEDROCK_MODEL_ID)
+    region_name = REGION_NAMES.get(region_id, region_id)
+    assessment = call_bedrock_agent(eo_data, rules_text, region_name)
+    assessment["region_id"] = region_id
+
+    # V2-6: pass through extractor source string as a single-element array.
+    # Future-ready for structured citations [{name, url, dataset_id}, ...].
+    source = eo_data.get("source")
+    assessment["sources"] = [source] if source else []
+
+    return assessment
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  LAMBDA ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -278,16 +334,17 @@ def lambda_handler(event: dict, context) -> dict:
 
     Expected POST body (JSON):
     {
-        "region_id": "danube-basin",                      // logical region identifier
+        "region_id": "pleven",                            // logical region identifier
         "bbox":      [lon_min, lat_min, lon_max, lat_max] // optional bounding box
     }
 
     Response (200):
     {
-        "region_id":  "danube-basin",
+        "region_id":  "pleven",
         "status":     "FLOOD_WATCH",
         "confidence": 0.82,
-        "reasoning":  "..."
+        "reasoning":  "...",
+        "sources":    ["Sentinel Hub Statistical API ..."]
     }
     """
     logger.info("Event received: %s", json.dumps(event))
@@ -306,34 +363,15 @@ def lambda_handler(event: dict, context) -> dict:
         logger.error("Invalid request body: %s", exc)
         return _response(400, {"error": f"Invalid JSON body: {exc}"})
 
-    # ── 2. Fetch EO + weather data (analysts' stub) ───────────────────────
-    logger.info("Fetching EO data for bbox: %s", bbox)
-    eo_data = get_eo_and_weather_data(bbox)
+    # ── 2. Run the core pipeline ──────────────────────────────────────────
+    assessment = assess_region(region_id, bbox)
 
-    # ── 3. Load meteorology rules file ────────────────────────────────────
-    try:
-        with open(RULES_FILE, "r", encoding="utf-8") as fh:
-            rules_text = fh.read()
-        logger.info("Loaded meteorology_rules.md (%d chars)", len(rules_text))
-    except FileNotFoundError:
-        rules_text = (
-            "Rules file not found. Apply conservative defaults:\n"
-            "- River level rise > 0.5 m in 7 days → FLOOD_WATCH\n"
-            "- Soil moisture < 15% + NDVI < 0.2   → DROUGHT_WATCH\n"
-        )
-        logger.warning("meteorology_rules.md not found — using built-in fallback rules.")
-
-    # ── 4. Call AWS Bedrock (Claude 3) ────────────────────────────────────
-    logger.info("Invoking Bedrock model: %s", BEDROCK_MODEL_ID)
-    assessment = call_bedrock_agent(eo_data, rules_text)
-    assessment["region_id"] = region_id   # attach region identifier to response
-
-    # ── 5. Trigger webhook for non-SAFE statuses ──────────────────────────
+    # ── 3. Trigger webhook for non-SAFE statuses (click-path: always fire) ──
     if assessment.get("status", "SAFE") != "SAFE":
         logger.info("Non-SAFE status detected (%s) — firing webhook.", assessment["status"])
         trigger_webhook(assessment)
 
-    # ── 6. Return API Gateway response ────────────────────────────────────
+    # ── 4. Return API Gateway response ────────────────────────────────────
     logger.info("Assessment complete: %s (confidence: %s)",
                 assessment.get("status"), assessment.get("confidence"))
     return _response(200, assessment)

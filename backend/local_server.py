@@ -41,8 +41,10 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.local"),  
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.example"), override=False)
 
 # Import the Lambda handlers — they work identically outside of Lambda
-from lambda_handler import lambda_handler as assess_handler
+from lambda_handler    import lambda_handler as assess_handler
 from subscribe_handler import lambda_handler as subscribe_handler
+from status_handler    import lambda_handler as status_handler
+from cron_handler      import lambda_handler as cron_handler
 
 app = Flask(__name__)
 
@@ -79,6 +81,24 @@ def subscribe():
     return _invoke_lambda(subscribe_handler)
 
 
+@app.route("/status", methods=["GET", "OPTIONS"])
+def status():
+    """GET /status — returns the latest snapshot per region."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _invoke_lambda(status_handler)
+
+
+@app.route("/cron-run", methods=["POST"])
+def cron_run():
+    """
+    POST /cron-run — manually trigger the cron orchestrator (local-dev only).
+    In AWS this is invoked by EventBridge Scheduler, not over HTTP.
+    """
+    summary = cron_handler({}, context=None)
+    return jsonify(summary), 200
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "HydroTwin local dev server"})
@@ -89,6 +109,8 @@ if __name__ == "__main__":
     print(f"\n  HydroTwin backend running at  http://localhost:{port}")
     print(f"  Health check:                   http://localhost:{port}/health")
     print(f"  Assess endpoint:                http://localhost:{port}/assess     (POST)")
-    print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe  (POST)\n")
+    print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe  (POST)")
+    print(f"  Status endpoint:                http://localhost:{port}/status     (GET)")
+    print(f"  Manual cron run:                http://localhost:{port}/cron-run   (POST)\n")
     print(f"  Set VITE_API_ENDPOINT=http://localhost:{port}/assess in frontend/.env.local\n")
     app.run(host="0.0.0.0", port=port, debug=True)
