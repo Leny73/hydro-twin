@@ -45,6 +45,34 @@ export async function fetchRecentPrecipSeries({ longitude, latitude, days = 14 }
   return points.slice(-days);
 }
 
+/**
+ * Fetch the next-N-days forecast outlook for a point.
+ * Returns daily precipitation_sum (mm) + temperature_2m_max (°C).
+ *
+ * @returns {Promise<{ date: string, precip_mm: number, temp_max_c: number|null }[]>}
+ */
+export async function fetchForecastOutlook({ longitude, latitude, days = 7 }) {
+  const url = new URL(FORECAST_URL);
+  url.searchParams.set('latitude',      latitude);
+  url.searchParams.set('longitude',     longitude);
+  url.searchParams.set('daily',         'precipitation_sum,temperature_2m_max');
+  url.searchParams.set('forecast_days', String(days));
+  url.searchParams.set('timezone',      'auto');
+
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`OpenMeteo HTTP ${res.status}`);
+  const data = await res.json();
+
+  const dates  = data?.daily?.time ?? [];
+  const precip = data?.daily?.precipitation_sum ?? [];
+  const tmax   = data?.daily?.temperature_2m_max ?? [];
+  return dates.map((d, i) => ({
+    date:       d,
+    precip_mm:  Number.isFinite(precip[i]) ? Number(precip[i]) : 0,
+    temp_max_c: Number.isFinite(tmax[i])   ? Number(tmax[i])   : null,
+  }));
+}
+
 // ── Threshold rules — simplified from backend/meteorology_rules.md ──────────
 // The full ruleset is the authoritative one in the Bedrock prompt. This is a
 // frontend approximation good enough for archive playback.

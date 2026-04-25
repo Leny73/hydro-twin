@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import PrecipitationChart from './PrecipitationChart';
+import ForecastOutlook    from './ForecastOutlook';
 import CycloneChart       from './CycloneChart';
+import RegionReports      from './RegionReports';
 import DatePicker         from './DatePicker';
 import CuratedEventChips  from './CuratedEventChips';
 
@@ -9,14 +11,17 @@ import CuratedEventChips  from './CuratedEventChips';
  * AlertPanel.jsx — AI Risk Assessment Panel (v3 + BF1-4 hierarchy)
  * ==================================================================
  *
- * BF1-4 layout (top → bottom):
- *   1. Header           — region name + status tag + close
+ * Layout (top → bottom):
+ *   1. Header (sticky)  — region name + status tag + close
  *   2. Replay banner    — only when in replay mode (compact)
  *   3. Current status   — colored badge with icon (top of fold)
  *   4. AI Confidence    — labelled progress bar
  *   5. Subscribe CTA    — hidden in replay mode
  *   6. AI Reasoning     — structured (4 sections) or markdown blob
- *   7. Sparkline        — small trend chart
+ *   7a. Precipitation   — 14-day OpenMeteo history chart
+ *   7b. Forecast        — next 7 days outlook (precip + temp), live-only
+ *   7c. Synoptic field  — ECMWF Z500/T850 chart, live-only
+ *   7d. Citizen reports — last 3 reports for THIS oblast, live-only
  *   8. Replay & past events — collapsible (DatePicker + CuratedEventChips),
  *                             closed by default, auto-opens when in replay
  *   9. Metadata footer  — compact provenance line (data source, timestamp)
@@ -419,11 +424,18 @@ export default function AlertPanel({
             </div>
           )}
 
-          {/* 7a. Precipitation chart (real OpenMeteo 14-day series) */}
+          {/* 7a. Precipitation history (OpenMeteo 14-day series) */}
           <PrecipitationChart region={region} />
 
-          {/* 7b. Synoptic cyclone field (Windy.com embed centred on region) */}
-          <CycloneChart region={region} />
+          {/* 7b. 7-day forecast outlook — what's coming next */}
+          {!isReplay && <ForecastOutlook region={region} />}
+
+          {/* 7c. Synoptic field — Windy pressure embed centred on the oblast,
+                 with a deep-link to the ECMWF Z500/T850 chart */}
+          {!isReplay && <CycloneChart region={region} />}
+
+          {/* 7d. Citizen reports for THIS oblast — ground truth pairing */}
+          {!isReplay && <RegionReports region={region} />}
 
           {/* 8. Replay & past events — collapsible */}
           <CollapsibleSection
