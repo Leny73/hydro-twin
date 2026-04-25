@@ -15,10 +15,11 @@
  *   VITE_API_ENDPOINT  – API Gateway endpoint URL
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import Map, { Source, Layer, Marker, NavigationControl, ScaleControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import AlertPanel from './components/AlertPanel';
+import MapLegend from './components/MapLegend';
 import REGIONS_GEOJSON from './regions.geojson';
 import HISTORICAL_EVENTS from './data/historicalEvents.json';
 import { fetchHistoricalAssessment } from './lib/openmeteo';
@@ -28,8 +29,24 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
 const API_ENDPOINT =
   import.meta.env.VITE_API_ENDPOINT ??
   'https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/assess';
+// /status sits next to /assess on the same API Gateway. Derive instead of asking
+// for a second env var so deployments stay simple.
+const STATUS_ENDPOINT = API_ENDPOINT.replace('/assess', '/status');
 
-// ── Monitoring regions — Pleven Oblast focus ─────────────────────────────────
+// ── Status → polygon fill colour (matches AlertPanel.STATUS_META) ────────────
+const STATUS_COLORS = {
+  SAFE:            '#10B981',
+  DROUGHT_WATCH:   '#F59E0B',
+  DROUGHT_WARNING: '#F97316',
+  FLOOD_WATCH:     '#3B82F6',
+  FLOOD_WARNING:   '#EF4444',
+};
+// Neutral grey used when no snapshot is available yet (first cron run pending,
+// table down, or /status fetch failed). Keeps the polygon visible without
+// implying a status it doesn't have.
+const NEUTRAL_COLOR = '#64748B'; // slate-500
+
+// ── Monitoring regions ───────────────────────────────────────────────────────
 // Centre coordinates + bbox kept here for label Markers and API calls.
 // Polygon shapes live in regions.geojson — edit that file to update boundaries.
 const REGIONS = [
@@ -41,6 +58,24 @@ const REGIONS = [
     latitude:    43.41,
     bbox:        [23.90, 43.15, 25.20, 43.70],
     color:       '#3B82F6', // blue — flood risk
+  },
+  {
+    id:          'yambol',
+    name:        'Yambol Oblast',
+    description: 'Southeast Bulgaria — Tundzha river basin; Thracian Lowland drought & flash-flood risk',
+    longitude:   26.613,
+    latitude:    42.329,
+    bbox:        [26.18, 41.94, 27.05, 42.72],
+    color:       '#F59E0B', // amber — drought-prone
+  },
+  {
+    id:          'burgas',
+    name:        'Burgas Oblast',
+    description: 'Black Sea coast — river-mouth flooding, storm-surge, Mandra-Poda wetlands',
+    longitude:   27.306,
+    latitude:    42.440,
+    bbox:        [26.58, 41.90, 28.04, 42.98],
+    color:       '#06B6D4', // cyan — coastal
   },
 ];
 
@@ -186,8 +221,65 @@ export default function App() {
     return assessment;
   }, [replayCuratedEvent, replayDate, replayAssessment, assessment]);
 
+  // V2-2: pre-computed status snapshot (one entry per region from /status)
+  const [regionStatuses,    setRegionStatuses]    = useState([]);
+  const [statusGeneratedAt, setStatusGeneratedAt] = useState(null);
+  const [statusDemoMode,    setStatusDemoMode]    = useState(false);
+
   // mapRef lets us call map.setFeatureState for hover highlighting
   const mapRef = useRef(null);
+
+  // ── V2-2: fetch /status on mount so polygons paint by current status ──────
+  useEffect(() => {
+    let cancelled = false;
+    fetch(STATUS_ENDPOINT)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        setRegionStatuses(Array.isArray(data?.regions) ? data.regions : []);
+        setStatusGeneratedAt(data?.generated_at ?? null);
+        setStatusDemoMode(!!data?.demo_mode);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        // Snapshot endpoint unavailable — polygons fall back to neutral grey
+        // and the legend shows a "Snapshot unavailable" badge. Map still works.
+        console.warn('[HydroTwin] /status fetch failed:', err.message);
+        setStatusDemoMode(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Derive the painted GeoJSON (base shapes + status-driven fill colour) ──
+  const paintedRegions = useMemo(() => {
+    const statusByRegion = Object.fromEntries(
+      regionStatuses.map(s => [s.region_id, s.status])
+    );
+    return {
+      ...REGIONS_GEOJSON,
+      features: REGIONS_GEOJSON.features.map(f => {
+        const status = statusByRegion[f.properties.id] ?? null;
+        return {
+          ...f,
+          properties: {
+            ...f.properties,
+            status,
+            color: STATUS_COLORS[status] ?? NEUTRAL_COLOR,
+          },
+        };
+      }),
+    };
+  }, [regionStatuses]);
+
+  // Newest assessed_at across all regions — drives the legend's freshness line
+  const latestAssessedAt = useMemo(() => {
+    if (regionStatuses.length === 0) return null;
+    const stamps = regionStatuses
+      .map(s => s.assessed_at)
+      .filter(Boolean)
+      .sort();
+    return stamps.length ? stamps[stamps.length - 1] : null;
+  }, [regionStatuses]);
 
   // ── Fetch assessment from API Gateway → Lambda ────────────────────────────
   const fetchAssessment = useCallback(async (region) => {
@@ -212,6 +304,28 @@ export default function App() {
       const data = await response.json();
       setAssessment(data);
 
+      // Keep the cached map paint in sync with on-demand fetches — when the
+      // user clicks a region, the polygon recolours to match the latest live
+      // status without waiting for the next cron run.
+      if (data?.status) {
+        setRegionStatuses(prev => {
+          const others = prev.filter(s => s.region_id !== region.id);
+          return [
+            ...others,
+            {
+              region_id:   region.id,
+              status:      data.status,
+              confidence:  data.confidence,
+              reasoning:   data.reasoning,
+              sources:     data.sources ?? [],
+              assessed_at: new Date().toISOString(),
+            },
+          ];
+        });
+        setStatusGeneratedAt(new Date().toISOString());
+        setStatusDemoMode(false);
+      }
+
     } catch (err) {
       // API unavailable — fall back to demo data so the UI always renders
       console.warn('[HydroTwin] Live API unavailable, using demo data:', err.message);
@@ -223,12 +337,32 @@ export default function App() {
   }, []);
 
   // ── Region marker click handler ───────────────────────────────────────────
+  // Cache-first: the cron-populated /status snapshot already carries status +
+  // confidence + reasoning + sources for every region, so we render it
+  // instantly instead of spinning up a fresh Bedrock call on every click.
+  // Fall back to live /assess only if no snapshot exists for this region
+  // (initial load still in flight, /status fetch failed, or first-ever run).
   const handleRegionClick = useCallback((region) => {
     setSelectedRegion(region);
     setReplayDate(null);          // exit any replay mode
     setReplayCuratedEvent(null);
+    setError(null);
+
+    const cached = regionStatuses.find(s => s.region_id === region.id);
+    if (cached?.status) {
+      setAssessment({
+        region_id:  region.id,
+        status:     cached.status,
+        confidence: cached.confidence ?? 0,
+        reasoning:  cached.reasoning ?? '',
+        sources:    cached.sources ?? [],
+      });
+      setIsLoading(false);
+      return;
+    }
+
     fetchAssessment(region);
-  }, [fetchAssessment]);
+  }, [regionStatuses, fetchAssessment]);
 
   // ── Close panel and return to full-screen map ─────────────────────────────
   const closePanel = useCallback(() => {
@@ -341,8 +475,8 @@ export default function App() {
         <NavigationControl position="bottom-right" />
         <ScaleControl      position="bottom-left"  unit="metric" />
 
-        {/* ── Zone polygon overlays ───────────────────────────────────────── */}
-        <Source id="regions" type="geojson" data={REGIONS_GEOJSON} generateId>
+        {/* ── Zone polygon overlays — painted by current status (V2-2) ───── */}
+        <Source id="regions" type="geojson" data={paintedRegions} generateId>
           {/* Semi-transparent fill — brightens on hover */}
           <Layer {...FILL_LAYER} />
           {/* Coloured border */}
@@ -379,6 +513,12 @@ export default function App() {
           </Marker>
         ))}
       </Map>
+
+      {/* ── Status legend + freshness indicator (V2-2) ──────────────────── */}
+      <MapLegend
+        lastUpdated={latestAssessedAt ?? statusGeneratedAt}
+        demoMode={statusDemoMode}
+      />
 
       {/* ── AI Assessment Panel (bottom sheet on mobile, sidebar on desktop) ── */}
       <AlertPanel

@@ -80,6 +80,9 @@ export default function AlertPanel({
   const [submitting, setSubmitting] = useState(false);
   const [toast,      setToast]      = useState(null); // { kind: 'success' | 'error', msg } | null
 
+  // V2-6: Data Sources expand/collapse
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+
   // Reset form whenever the user picks a different region — otherwise an
   // open form / stale toast would leak across selections.
   useEffect(() => {
@@ -87,6 +90,7 @@ export default function AlertPanel({
     setEmail('');
     setSubmitting(false);
     setToast(null);
+    setSourcesOpen(false);
   }, [region?.id]);
 
   // Panel is invisible until a region has been selected (or a load is in-flight)
@@ -409,6 +413,39 @@ export default function AlertPanel({
 
           {/* ── Metrics Sparkline ─────────────────────────────────────────── */}
           <MetricsSparkline />
+
+          {/* ── Data Sources (V2-6) — collapsed by default; hidden if empty ── */}
+          {Array.isArray(assessment.sources) && assessment.sources.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setSourcesOpen(o => !o)}
+                className="w-full flex items-center justify-between
+                           text-[10px] uppercase tracking-widest text-gray-400
+                           hover:text-gray-200 transition-colors mb-1.5
+                           cursor-pointer"
+                aria-expanded={sourcesOpen}
+                aria-controls="data-sources-list"
+              >
+                <span>📚 Data Sources ({assessment.sources.length})</span>
+                <span className="text-gray-500 text-base leading-none">
+                  {sourcesOpen ? '−' : '+'}
+                </span>
+              </button>
+              {sourcesOpen && (
+                <ul
+                  id="data-sources-list"
+                  className="text-xs text-gray-300 leading-relaxed
+                             bg-gray-800/40 p-3 rounded-lg border border-gray-700/40
+                             space-y-1.5 list-disc list-inside marker:text-cyan-500"
+                >
+                  {assessment.sources.map((src, i) => (
+                    <li key={i} className="ml-1">{String(src)}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* ── Metadata Footer ───────────────────────────────────────────── */}
           <div className="text-[10px] text-gray-500 bg-gray-800/30 rounded-md p-2.5 border border-gray-800/60 leading-relaxed">
