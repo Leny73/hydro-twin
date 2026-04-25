@@ -60,8 +60,8 @@ logger = logging.getLogger(__name__)
 # ── Sentinel Hub credentials ──────────────────────────────────────────────────
 SH_CLIENT_ID     = os.environ.get("SH_CLIENT_ID", "")
 SH_CLIENT_SECRET = os.environ.get("SH_CLIENT_SECRET", "")
-SH_TOKEN_URL     = "https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token"
-SH_STATS_URL     = "https://services.sentinel-hub.com/api/v1/statistics"
+SH_TOKEN_URL     = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+SH_STATS_URL     = "https://sh.dataspace.copernicus.eu/statistics/v1"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SENTINEL HUB HELPERS
@@ -126,19 +126,16 @@ def _sh_statistics(token: str, bbox: list, evalscript: str,
                 "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
             },
             "data": [{
-                "dataFilter": {
-                    "timeRange":       {"from": start, "to": end},
-                    "maxCloudCoverage": max_cloud_pct,
-                },
                 "type": dataset,
+                "dataFilter": {"mosaickingOrder": "leastCC"},
             }],
         },
         "aggregation": {
             "timeRange":           {"from": start, "to": end},
             "aggregationInterval": {"of": "P1D"},   # daily buckets
             "evalscript":          evalscript,
-            "resx": 120,   # 120 m resolution — fast + cheap for statistics
-            "resy": 120,
+            "resx": 0.01,  # 0.01° ≈ 814 m at 43°N — CRS84 units are degrees
+            "resy": 0.01,
         },
         "calculations": {
             "default": {
