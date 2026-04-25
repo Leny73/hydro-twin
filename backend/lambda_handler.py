@@ -38,11 +38,18 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Configuration (from Lambda environment variables) ────────────────────────
-WEBHOOK_URL      = os.environ.get("WEBHOOK_URL", "")
-BEDROCK_MODEL_ID = os.environ.get(
+# Comma-separated list of Discord webhook URLs — alerts fire to all of them
+DISCORD_WEBHOOK_URLS = [
+    u.strip()
+    for u in os.environ.get("DISCORD_WEBHOOK_URL", "").split(",")
+    if u.strip()
+]
+TELEGRAM_BOT_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
+BEDROCK_MODEL_ID     = os.environ.get(
     "BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0"
 )
-BEDROCK_REGION   = os.environ.get("BEDROCK_REGION", "us-east-1")
+BEDROCK_REGION       = os.environ.get("BEDROCK_REGION", "us-east-1")
 
 # Path to the meteorology rules file — bundled inside the Lambda package
 RULES_FILE = os.path.join(os.path.dirname(__file__), "meteorology_rules.md")
@@ -139,23 +146,15 @@ Required JSON schema:
 
 def trigger_webhook(alert_data: dict) -> None:
     """
-    Send a formatted alert embed to a Discord or Telegram webhook.
+    Fire alerts to Discord AND Telegram simultaneously (whichever are configured).
 
-    Discord  : set WEBHOOK_URL = https://discord.com/api/webhooks/<id>/<token>
-    Telegram : set WEBHOOK_URL = https://api.telegram.org/bot<TOKEN>/sendMessage
-               (also set TELEGRAM_CHAT_ID env var; requires payload modification below)
+    Env vars:
+      DISCORD_WEBHOOK_URL  – https://discord.com/api/webhooks/<id>/<token>
+      TELEGRAM_BOT_TOKEN   – token from @BotFather
+      TELEGRAM_CHAT_ID     – your personal or channel chat id
 
-    This function is non-fatal — a webhook failure will never block the Lambda
-    response to the client.
-
-    Args:
-        alert_data: dict containing region_id, status, confidence, reasoning.
+    Non-fatal — delivery failures never block the Lambda response.
     """
-    if not WEBHOOK_URL:
-        logger.warning("WEBHOOK_URL is not set — skipping webhook notification.")
-        return
-
-    # ── Colour & emoji based on severity ─────────────────────────────────
     STATUS_META = {
         "SAFE":            {"emoji": "✅", "color": 0x10B981},
         "DROUGHT_WATCH":   {"emoji": "🟡", "color": 0xF59E0B},
@@ -163,49 +162,64 @@ def trigger_webhook(alert_data: dict) -> None:
         "FLOOD_WATCH":     {"emoji": "🌊", "color": 0x3B82F6},
         "FLOOD_WARNING":   {"emoji": "🔴", "color": 0xEF4444},
     }
-    meta = STATUS_META.get(alert_data.get("status", "SAFE"), STATUS_META["SAFE"])
+    meta   = STATUS_META.get(alert_data.get("status", "SAFE"), STATUS_META["SAFE"])
+    status = alert_data.get("status", "N/A")
+    region = alert_data.get("region_id", "Unknown Region")
+    conf   = int(alert_data.get("confidence", 0) * 100)
+    reason = alert_data.get("reasoning", "No reasoning provided.")
 
-    # ── Discord embed payload ─────────────────────────────────────────────
-    discord_payload = {
+    if DISCORD_WEBHOOK_URLS:
+        for url in DISCORD_WEBHOOK_URLS:
+            try:
+                _send_discord(url, meta, status, region, conf, reason)
+            except requests.RequestException as exc:
+                logger.error("Discord delivery failed (%s…): %s", url[:40], exc)
+    else:
+        logger.warning("DISCORD_WEBHOOK_URL not set — skipping Discord.")
+
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        try:
+            _send_telegram(meta["emoji"], status, region, conf, reason)
+        except requests.RequestException as exc:
+            logger.error("Telegram delivery failed: %s", exc)
+    else:
+        logger.warning("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — skipping Telegram.")
+
+
+def _send_discord(url: str, meta: dict, status: str, region: str, conf: int, reason: str) -> None:
+    payload = {
         "username":   "HydroTwin",
         "avatar_url": "https://cdn-icons-png.flaticon.com/512/3222/3222800.png",
         "embeds": [{
-            "title":       (
-                f"{meta['emoji']} HydroTwin Alert — "
-                f"{alert_data.get('region_id', 'Unknown Region')}"
-            ),
-            "description": alert_data.get("reasoning", "No reasoning provided."),
-            "color":       meta["color"],
+            "title":       f"{meta['emoji']} HydroTwin Alert — {region}",
+            "description": reason,
+            "color":       meta.get("color", 0x10B981),
             "fields": [
-                {
-                    "name":   "Status",
-                    "value":  alert_data.get("status", "N/A"),
-                    "inline": True,
-                },
-                {
-                    "name":   "Confidence",
-                    "value":  f"{int(alert_data.get('confidence', 0) * 100)}%",
-                    "inline": True,
-                },
-                {
-                    "name":   "Region ID",
-                    "value":  alert_data.get("region_id", "N/A"),
-                    "inline": True,
-                },
+                {"name": "Status",     "value": status,     "inline": True},
+                {"name": "Confidence", "value": f"{conf}%", "inline": True},
+                {"name": "Region",     "value": region,     "inline": True},
             ],
-            "footer": {
-                "text": "HydroTwin · Copernicus EO + AWS Bedrock (Claude 3)",
-            },
+            "footer": {"text": "HydroTwin · Copernicus EO + AWS Bedrock (Claude 3)"},
         }],
     }
+    resp = requests.post(url, json=payload, timeout=5)
+    resp.raise_for_status()
+    logger.info("Discord webhook delivered: HTTP %s", resp.status_code)
 
-    try:
-        resp = requests.post(WEBHOOK_URL, json=discord_payload, timeout=5)
-        resp.raise_for_status()
-        logger.info("Webhook delivered successfully: HTTP %s", resp.status_code)
-    except requests.RequestException as exc:
-        # Non-fatal — log and continue
-        logger.error("Webhook delivery failed: %s", exc)
+
+def _send_telegram(emoji: str, status: str, region: str, conf: int, reason: str) -> None:
+    url  = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    text = (
+        f"{emoji} <b>HydroTwin Alert — {region}</b>\n\n"
+        f"<b>Status:</b> {status}\n"
+        f"<b>Confidence:</b> {conf}%\n\n"
+        f"{reason}\n\n"
+        f"<i>HydroTwin · Copernicus EO + AWS Bedrock (Claude 3)</i>"
+    )
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    resp = requests.post(url, json=payload, timeout=5)
+    resp.raise_for_status()
+    logger.info("Telegram message delivered: HTTP %s", resp.status_code)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
