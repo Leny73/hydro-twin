@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # ── Sentinel Hub credentials ──────────────────────────────────────────────────
 SH_CLIENT_ID     = os.environ.get("SH_CLIENT_ID", "")
 SH_CLIENT_SECRET = os.environ.get("SH_CLIENT_SECRET", "")
-SH_TOKEN_URL     = "https://services.sentinel-hub.com/oauth/token"
+SH_TOKEN_URL     = "https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token"
 SH_STATS_URL     = "https://services.sentinel-hub.com/api/v1/statistics"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -202,20 +202,23 @@ EVALSCRIPT_NDVI = """
 //VERSION=3
 function setup() {
   return {
-    input:  [{ bands: ["B04", "B08", "SCL"] }],
-    output: [{ id: "ndvi", bands: 1, sampleType: "FLOAT32" }],
+    input:  [{ bands: ["B04", "B08", "SCL", "dataMask"] }],
+    output: [
+      { id: "ndvi",     bands: 1, sampleType: "FLOAT32" },
+      { id: "dataMask", bands: 1, sampleType: "UINT8" },
+    ],
     mosaicking: Mosaicking.ORBIT,
   };
 }
 function evaluatePixel(samples) {
   // Use only vegetation (4) and bare soil (5) SCL classes — exclude clouds
-  let valid = samples.filter(s => s.SCL === 4 || s.SCL === 5);
-  if (valid.length === 0) return { ndvi: [NaN] };
+  let valid = samples.filter(s => s.dataMask === 1 && (s.SCL === 4 || s.SCL === 5));
+  if (valid.length === 0) return { ndvi: [NaN], dataMask: [0] };
   let mean = valid.reduce((sum, s) => {
     let denom = s.B08 + s.B04;
     return sum + (denom !== 0 ? (s.B08 - s.B04) / denom : 0);
   }, 0) / valid.length;
-  return { ndvi: [mean] };
+  return { ndvi: [mean], dataMask: [1] };
 }
 """
 
@@ -225,19 +228,22 @@ EVALSCRIPT_NDWI = """
 //VERSION=3
 function setup() {
   return {
-    input:  [{ bands: ["B03", "B08", "SCL"] }],
-    output: [{ id: "ndwi", bands: 1, sampleType: "FLOAT32" }],
+    input:  [{ bands: ["B03", "B08", "SCL", "dataMask"] }],
+    output: [
+      { id: "ndwi",     bands: 1, sampleType: "FLOAT32" },
+      { id: "dataMask", bands: 1, sampleType: "UINT8" },
+    ],
     mosaicking: Mosaicking.ORBIT,
   };
 }
 function evaluatePixel(samples) {
-  let valid = samples.filter(s => s.SCL !== 3 && s.SCL !== 8 && s.SCL !== 9 && s.SCL !== 10);
-  if (valid.length === 0) return { ndwi: [NaN] };
+  let valid = samples.filter(s => s.dataMask === 1 && s.SCL !== 3 && s.SCL !== 8 && s.SCL !== 9 && s.SCL !== 10);
+  if (valid.length === 0) return { ndwi: [NaN], dataMask: [0] };
   let mean = valid.reduce((sum, s) => {
     let denom = s.B03 + s.B08;
     return sum + (denom !== 0 ? (s.B03 - s.B08) / denom : 0);
   }, 0) / valid.length;
-  return { ndwi: [mean] };
+  return { ndwi: [mean], dataMask: [1] };
 }
 """
 
