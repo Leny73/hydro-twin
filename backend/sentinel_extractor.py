@@ -358,7 +358,10 @@ def get_eo_and_weather_data(bbox: list) -> dict:
         else "OpenMeteo only (Sentinel Hub credentials not set — NDVI/NDWI are estimated)"
     )
 
+
+
     return {
+
         # ── Core EO fields (required by lambda_handler.py) ────────────────
         "ndvi":               ndvi  if ndvi  is not None else 0.35,
         "soil_moisture_pct":  weather.get("soil_moisture_pct")  or 30.0,
