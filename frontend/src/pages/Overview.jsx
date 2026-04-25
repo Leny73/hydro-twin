@@ -206,6 +206,11 @@ function bboxCenter(bbox) {
   return [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
 }
 
+// Maps GADM NAME_1 region name → HISTORICAL_EVENTS key so municipality clicks
+// surface the same curated event chips as the parent oblast (works for all
+// three monitored oblasts — was previously hardcoded to Pleven only).
+const REGION_NAME_TO_ID = { Pleven: 'pleven', Yambol: 'yambol', Burgas: 'burgas' };
+
 const buildDemoResponse = (region) => ({
   region_id:  region.id,
   status:     'FLOOD_WATCH',
@@ -252,10 +257,12 @@ export default function Overview() {
 
   const mapRef = useRef(null);
 
-  // Curated events for the selected region — municipalities inherit Pleven's.
+  // Curated events for the selected region — municipalities inherit their
+  // parent oblast's events via parentRegionId (resolved at click time from
+  // GADM NAME_1).
   const regionEvents = useMemo(() => {
     if (!selectedRegion) return [];
-    const eventKey = selectedRegion.id?.startsWith('BGR.') ? 'pleven' : selectedRegion.id;
+    const eventKey = selectedRegion.parentRegionId ?? selectedRegion.id;
     return HISTORICAL_EVENTS[eventKey] ?? [];
   }, [selectedRegion]);
 
@@ -497,12 +504,13 @@ export default function Overview() {
     if (muni) {
       const bbox = bboxFromGeometry(muni.geometry);
       const muniRegion = {
-        id:          muni.properties.GID_2,
-        name:        muni.properties.NAME_2,
-        description: `${muni.properties.NAME_2} municipality — ${muni.properties.NAME_1} Region`,
+        id:             muni.properties.GID_2,
+        name:           muni.properties.NAME_2,
+        description:    `${muni.properties.NAME_2} municipality — ${muni.properties.NAME_1} Region`,
         bbox,
-        longitude:   (bbox[0] + bbox[2]) / 2,
-        latitude:    (bbox[1] + bbox[3]) / 2,
+        longitude:      (bbox[0] + bbox[2]) / 2,
+        latitude:       (bbox[1] + bbox[3]) / 2,
+        parentRegionId: REGION_NAME_TO_ID[muni.properties.NAME_1] ?? null,
       };
       handleRegionClick(muniRegion);
       return;

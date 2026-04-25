@@ -37,7 +37,7 @@ export default function DatePicker({
         <input
           id="replay-date"
           type="date"
-          value={value ?? ''}
+          value={value ?? TODAY}
           onChange={handleChange}
           min={minDate}
           max={maxDate}
