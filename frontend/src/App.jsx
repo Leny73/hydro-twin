@@ -21,6 +21,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import AlertPanel from './components/AlertPanel';
 import MapLegend from './components/MapLegend';
 import REGIONS_GEOJSON from './regions.geojson';
+import MUNICIPALITIES_GEOJSON from './municipalities.geojson';
 
 // ── API / Token configuration ─────────────────────────────────────────────────
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
@@ -79,6 +80,63 @@ const REGIONS = [
 
 // REGIONS_GEOJSON is imported from ./regions.geojson
 // Edit that file to update zone polygon boundaries without touching this file.
+
+// ── Pleven municipality layer descriptors ─────────────────────────────────────
+const MUNICIPALITIES_FILL_LAYER = {
+  id:   'municipalities-fill',
+  type: 'fill',
+  paint: {
+    // If the municipality has been assessed, show its status colour; else neutral blue
+    'fill-color':   ['coalesce', ['get', 'color'], '#3B82F6'],
+    'fill-opacity': [
+      'case',
+      ['boolean', ['feature-state', 'hover'], false], 0.65,
+      ['has', 'color'], 0.50,
+      0.30,
+    ],
+  },
+};
+
+const MUNICIPALITIES_OUTLINE_LAYER = {
+  id:   'municipalities-outline',
+  type: 'line',
+  paint: {
+    'line-color':   '#60A5FA', // blue-400
+    'line-width':   2,
+    'line-opacity': 1,
+  },
+};
+
+const MUNICIPALITIES_LABEL_LAYER = {
+  id:     'municipalities-label',
+  type:   'symbol',
+  layout: {
+    'text-field':      ['get', 'NAME_2'],
+    'text-font':       ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
+    'text-size':       12,
+    'text-anchor':     'center',
+    'text-max-width':  8,
+  },
+  paint: {
+    'text-color':       '#EFF6FF', // blue-50
+    'text-halo-color':  '#1E3A5F',
+    'text-halo-width':  2,
+    'text-halo-blur':   0,
+  },
+};
+
+// Cyan dashed ring on the selected municipality
+const MUNICIPALITIES_SELECTED_LAYER = {
+  id:     'municipalities-selected',
+  type:   'line',
+  filter: ['==', ['get', 'GID_2'], ''], // updated dynamically
+  paint:  {
+    'line-color':     '#67E8F9', // cyan-300
+    'line-width':     3,
+    'line-opacity':   1,
+    'line-dasharray': [2, 1],
+  },
+};
 
 // ── Mapbox layer descriptors (static objects — defined outside component) ─────
 // Fill layer: semi-transparent colour, brightens on hover via feature-state.
@@ -142,13 +200,30 @@ const buildDemoResponse = (region) => ({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Utility: compute [lon_min, lat_min, lon_max, lat_max] from any GeoJSON geometry
+function bboxFromGeometry(geometry) {
+  const lons = [], lats = [];
+  const collect = (arr) => {
+    if (typeof arr[0] === 'number') { lons.push(arr[0]); lats.push(arr[1]); return; }
+    arr.forEach(collect);
+  };
+  collect(geometry.coordinates);
+  return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
   // ── State ─────────────────────────────────────────────────────────────────
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [assessment,     setAssessment]     = useState(null);
   const [isLoading,      setIsLoading]      = useState(false);
   const [error,          setError]          = useState(null);
-  const [hoveredId,      setHoveredId]      = useState(null); // for hover feature-state
+  // hoveredMuniId stored in a ref (not state) so mouse handlers never
+  // get recreated on every hover, keeping them stable for Mapbox.
+  const hoveredMuniIdRef = useRef(null);
+
+  // Municipality on-demand assessment cache (keyed by GID_2)
+  const [muniStatuses, setMuniStatuses] = useState({});
 
   // V2-2: pre-computed status snapshot (one entry per region from /status)
   const [regionStatuses,    setRegionStatuses]    = useState([]);
@@ -199,6 +274,29 @@ export default function App() {
       }),
     };
   }, [regionStatuses]);
+
+  // ── Painted municipalities GeoJSON — fill colour updated after each assessment
+  const paintedMunicipalities = useMemo(() => ({
+    ...MUNICIPALITIES_GEOJSON,
+    features: MUNICIPALITIES_GEOJSON.features.map(f => {
+      const s = muniStatuses[f.properties.GID_2];
+      const extra = s ? { color: s.color } : {};
+      return { ...f, properties: { ...f.properties, ...extra } };
+    }),
+  }), [muniStatuses]);
+
+  // Sync municipality status colour after a successful on-demand assessment
+  useEffect(() => {
+    if (!assessment?.status || !selectedRegion?.id) return;
+    if (!selectedRegion.id.startsWith('BGR.')) return; // only municipality IDs
+    setMuniStatuses(prev => ({
+      ...prev,
+      [selectedRegion.id]: {
+        status: assessment.status,
+        color:  STATUS_COLORS[assessment.status] ?? NEUTRAL_COLOR,
+      },
+    }));
+  }, [assessment, selectedRegion]);
 
   // Newest assessed_at across all regions — drives the legend's freshness line
   const latestAssessedAt = useMemo(() => {
@@ -298,34 +396,62 @@ export default function App() {
     setError(null);
   }, []);
 
-  // ── Hover handlers — update Mapbox feature-state for fill opacity/outline ─
-  const handleMouseEnter = useCallback((e) => {
-    if (!mapRef.current || !e.features?.length) return;
+  // ── Hover handler — single mousemove is more reliable than enter/leave ──
+  // onMouseEnter/Leave misfires between adjacent polygons (leave fires before
+  // enter on the next feature). onMouseMove fires every frame and e.features
+  // always reflects what's actually under the cursor.
+  const handleMouseMove = useCallback((e) => {
+    if (!mapRef.current) return;
     const map = mapRef.current.getMap();
-    const id  = e.features[0].id;
-    if (hoveredId !== null && hoveredId !== id) {
-      map.setFeatureState({ source: 'regions', id: hoveredId }, { hover: false });
+    const feature = e.features?.find(f => f.layer.id === 'municipalities-fill');
+    const id = feature?.id ?? null;
+
+    if (id !== hoveredMuniIdRef.current) {
+      // Clear previous
+      if (hoveredMuniIdRef.current !== null) {
+        map.setFeatureState(
+          { source: 'municipalities', id: hoveredMuniIdRef.current },
+          { hover: false }
+        );
+      }
+      // Set new
+      if (id !== null) {
+        map.setFeatureState({ source: 'municipalities', id }, { hover: true });
+      }
+      hoveredMuniIdRef.current = id;
     }
-    map.setFeatureState({ source: 'regions', id }, { hover: true });
-    map.getCanvas().style.cursor = 'pointer';
-    setHoveredId(id);
-  }, [hoveredId]);
+    map.getCanvas().style.cursor = id !== null ? 'pointer' : '';
+  }, []);
 
   const handleMouseLeave = useCallback(() => {
-    if (!mapRef.current || hoveredId === null) return;
+    if (!mapRef.current) return;
     const map = mapRef.current.getMap();
-    map.setFeatureState({ source: 'regions', id: hoveredId }, { hover: false });
+    if (hoveredMuniIdRef.current !== null) {
+      map.setFeatureState(
+        { source: 'municipalities', id: hoveredMuniIdRef.current },
+        { hover: false }
+      );
+      hoveredMuniIdRef.current = null;
+    }
     map.getCanvas().style.cursor = '';
-    setHoveredId(null);
-  }, [hoveredId]);
+  }, []);
 
-  // ── Map click — detect which zone was tapped/clicked ─────────────────────
+  // ── Map click — only municipalities are interactive ──────────────────────
   const handleMapClick = useCallback((e) => {
     if (!e.features?.length) return;
-    const regionId = e.features[0].properties.id;
-    const region   = REGIONS.find(r => r.id === regionId);
-    if (region) handleRegionClick(region);
-  }, [handleRegionClick]);
+    const feature = e.features[0];
+    if (feature.layer.id !== 'municipalities-fill') return;
+    const bbox = bboxFromGeometry(feature.geometry);
+    const muniRegion = {
+      id:          feature.properties.GID_2,
+      name:        feature.properties.NAME_2,
+      description: `${feature.properties.NAME_2} municipality — ${feature.properties.NAME_1} Region`,
+      bbox,
+    };
+    setSelectedRegion(muniRegion);
+    setError(null);
+    fetchAssessment(muniRegion);
+  }, [fetchAssessment]);
 
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -356,9 +482,9 @@ export default function App() {
         initialViewState={INITIAL_VIEW_STATE}
         style={{ width: '100%', height: '100%' }}
         mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
-        interactiveLayerIds={['regions-fill']}  // enables onClick + onMouseEnter per feature
+        interactiveLayerIds={['municipalities-fill']}  // only municipalities are interactive
         onClick={handleMapClick}
-        onMouseEnter={handleMouseEnter}
+        onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         fog={{
           range:            [0.5, 10],
@@ -371,6 +497,22 @@ export default function App() {
       >
         <NavigationControl position="bottom-right" />
         <ScaleControl      position="bottom-left"  unit="metric" />
+
+        {/* ── Pleven municipality boundaries ──────────────────────────────── */}
+        <Source
+          id="municipalities"
+          type="geojson"
+          data={paintedMunicipalities}
+          promoteId="GID_2"
+        >
+          <Layer {...MUNICIPALITIES_FILL_LAYER} />
+          <Layer {...MUNICIPALITIES_OUTLINE_LAYER} />
+          <Layer
+            {...MUNICIPALITIES_SELECTED_LAYER}
+            filter={['==', ['get', 'GID_2'], selectedRegion?.id?.startsWith('BGR.') ? selectedRegion.id : '']}
+          />
+          <Layer {...MUNICIPALITIES_LABEL_LAYER} />
+        </Source>
 
         {/* ── Zone polygon overlays — painted by current status (V2-2) ───── */}
         <Source id="regions" type="geojson" data={paintedRegions}>
@@ -385,7 +527,7 @@ export default function App() {
           />
         </Source>
 
-        {/* ── Zone name labels — centred on each region ──────────────────── */}
+        {/* ── Oblast boundary labels (non-interactive) ──────────────────── */}
         {REGIONS.map((region) => (
           <Marker
             key={region.id}
@@ -394,16 +536,10 @@ export default function App() {
             anchor="center"
           >
             <div
-              onClick={() => handleRegionClick(region)}
-              className="pointer-events-auto cursor-pointer select-none
+              className="pointer-events-none select-none
                          px-2 py-0.5 rounded text-[11px] font-bold
-                         text-white drop-shadow-lg
-                         transition-opacity duration-150"
-              style={{
-                textShadow: '0 0 6px #000, 0 0 3px #000',
-                opacity: hoveredId === region.id || selectedRegion?.id === region.id ? 1 : 0.75,
-              }}
-              aria-label={`Assess ${region.name}`}
+                         text-white/60 drop-shadow-lg"
+              style={{ textShadow: '0 0 6px #000, 0 0 3px #000' }}
             >
               {region.name}
             </div>
@@ -434,7 +570,7 @@ export default function App() {
                      text-gray-400 text-xs px-5 py-2.5 rounded-full
                      pointer-events-none select-none"
         >
-          Tap a region marker to run AI risk assessment
+          Tap a municipality to run AI risk assessment
         </div>
       )}
     </div>
