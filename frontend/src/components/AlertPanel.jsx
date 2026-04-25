@@ -196,6 +196,91 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
       {/* ── Assessment Results ────────────────────────────────────────────── */}
       {!isLoading && assessment && (
         <>
+          {/* ── Subscribe CTA  →  expands to inline form ──────────────────── */}
+          {!formOpen ? (
+            <button
+              onClick={() => { setToast(null); setFormOpen(true); }}
+              className={`
+                w-full min-h-[44px] py-3 rounded-lg text-xs font-bold tracking-widest uppercase
+                transition-all duration-200 active:scale-95 cursor-pointer
+                ${isAlert
+                  ? 'bg-red-600 hover:bg-red-500 text-white'
+                  : 'bg-cyan-800 hover:bg-cyan-700 text-white'}
+              `}
+              aria-label={`Subscribe to push alerts for ${region?.name}`}
+            >
+              {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to Push Alerts'}
+            </button>
+          ) : (
+            <form
+              onSubmit={submitSubscribe}
+              className="flex flex-col gap-2"
+              aria-label={`Subscribe form for ${region?.name}`}
+            >
+              <label
+                htmlFor="subscribe-email"
+                className="text-[10px] uppercase tracking-widest text-gray-400"
+              >
+                Email Address
+              </label>
+              <input
+                id="subscribe-email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={submitting}
+                placeholder="you@example.com"
+                aria-invalid={toast?.kind === 'error' ? 'true' : 'false'}
+                className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
+                           rounded-lg text-sm text-white placeholder-gray-500
+                           focus:outline-none focus:border-cyan-500
+                           disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`flex-1 min-h-[44px] py-3 rounded-lg text-xs font-bold tracking-widest uppercase
+                              transition-all duration-200 active:scale-95 cursor-pointer
+                              disabled:opacity-60 disabled:cursor-not-allowed
+                              ${isAlert
+                                ? 'bg-red-600 hover:bg-red-500 text-white'
+                                : 'bg-cyan-800 hover:bg-cyan-700 text-white'}`}
+                >
+                  {submitting ? 'Subscribing…' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  disabled={submitting}
+                  className="min-h-[44px] px-4 py-3 rounded-lg text-xs font-bold tracking-widest uppercase
+                             bg-gray-800 hover:bg-gray-700 text-gray-300
+                             transition-all duration-200 active:scale-95 cursor-pointer
+                             disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── Toast: success / error feedback (paired with Subscribe) ───── */}
+          {toast && (
+            <div
+              role={toast.kind === 'error' ? 'alert' : 'status'}
+              aria-live="polite"
+              className={`text-[11px] px-3 py-2 rounded-md text-center leading-relaxed border
+                ${toast.kind === 'success'
+                  ? 'bg-emerald-950/50 border-emerald-700/70 text-emerald-200'
+                  : 'bg-red-950/50 border-red-700/70 text-red-200'}`}
+            >
+              {toast.msg}
+            </div>
+          )}
+
           {/* ── Status Badge ──────────────────────────────────────────────── */}
           <div className={`p-3 rounded-lg border ${meta.bg} ${meta.border}`}>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
@@ -264,90 +349,6 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
             {new Date().toUTCString()}
           </div>
 
-          {/* ── Toast: success / error feedback ───────────────────────────── */}
-          {toast && (
-            <div
-              role={toast.kind === 'error' ? 'alert' : 'status'}
-              aria-live="polite"
-              className={`mt-auto text-[11px] px-3 py-2 rounded-md text-center leading-relaxed border
-                ${toast.kind === 'success'
-                  ? 'bg-emerald-950/50 border-emerald-700/70 text-emerald-200'
-                  : 'bg-red-950/50 border-red-700/70 text-red-200'}`}
-            >
-              {toast.msg}
-            </div>
-          )}
-
-          {/* ── Subscribe CTA  →  expands to inline form ──────────────────── */}
-          {!formOpen ? (
-            <button
-              onClick={() => { setToast(null); setFormOpen(true); }}
-              className={`
-                ${toast ? '' : 'mt-auto'} w-full min-h-[44px] py-3 rounded-lg text-xs font-bold tracking-widest uppercase
-                transition-all duration-200 active:scale-95 cursor-pointer
-                ${isAlert
-                  ? 'bg-red-600 hover:bg-red-500 text-white'
-                  : 'bg-cyan-800 hover:bg-cyan-700 text-white'}
-              `}
-              aria-label={`Subscribe to push alerts for ${region?.name}`}
-            >
-              {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to Push Alerts'}
-            </button>
-          ) : (
-            <form
-              onSubmit={submitSubscribe}
-              className={`${toast ? '' : 'mt-auto'} flex flex-col gap-2`}
-              aria-label={`Subscribe form for ${region?.name}`}
-            >
-              <label
-                htmlFor="subscribe-email"
-                className="text-[10px] uppercase tracking-widest text-gray-400"
-              >
-                Email Address
-              </label>
-              <input
-                id="subscribe-email"
-                type="email"
-                autoComplete="email"
-                autoFocus
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={submitting}
-                placeholder="you@example.com"
-                aria-invalid={toast?.kind === 'error' ? 'true' : 'false'}
-                className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
-                           rounded-lg text-sm text-white placeholder-gray-500
-                           focus:outline-none focus:border-cyan-500
-                           disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className={`flex-1 min-h-[44px] py-3 rounded-lg text-xs font-bold tracking-widest uppercase
-                              transition-all duration-200 active:scale-95 cursor-pointer
-                              disabled:opacity-60 disabled:cursor-not-allowed
-                              ${isAlert
-                                ? 'bg-red-600 hover:bg-red-500 text-white'
-                                : 'bg-cyan-800 hover:bg-cyan-700 text-white'}`}
-                >
-                  {submitting ? 'Subscribing…' : 'Confirm'}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  disabled={submitting}
-                  className="min-h-[44px] px-4 py-3 rounded-lg text-xs font-bold tracking-widest uppercase
-                             bg-gray-800 hover:bg-gray-700 text-gray-300
-                             transition-all duration-200 active:scale-95 cursor-pointer
-                             disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
         </>
       )}
 
