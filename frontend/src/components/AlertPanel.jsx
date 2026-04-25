@@ -1,4 +1,19 @@
 import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+
+// ── Markdown renderer overrides for the `reasoning` field ─────────────────────
+// The Lambda asks Claude to return reasoning as light markdown (bold, bullets).
+// These overrides keep the existing dark-theme blockquote look — no new styles.
+const MD_COMPONENTS = {
+  p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+  em:     ({ children }) => <em className="italic text-gray-300">{children}</em>,
+  ul:     ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 marker:text-cyan-500">{children}</ul>,
+  ol:     ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 marker:text-cyan-500">{children}</ol>,
+  li:     ({ children }) => <li className="ml-1">{children}</li>,
+  code:   ({ children }) => <code className="px-1 py-0.5 bg-gray-900 rounded text-cyan-300 text-[11px]">{children}</code>,
+  a:      ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="text-cyan-400 underline">{children}</a>,
+};
 
 /**
  * AlertPanel.jsx — AI Risk Assessment Panel
@@ -172,7 +187,7 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
           <div className="h-2  w-4/6 bg-gray-700 rounded" />
           <div className="h-20 w-full bg-gray-700 rounded mt-2" />
           <p className="text-xs text-cyan-400 text-center pt-1">
-            Querying AWS Bedrock (Claude 3)…
+            Querying AWS Bedrock (Claude Sonnet 4.6)…
           </p>
         </div>
       )}
@@ -226,11 +241,13 @@ export default function AlertPanel({ region, assessment, isLoading, error, onClo
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
               AI Reasoning{' '}
               <span className="text-cyan-500 normal-case tracking-normal font-normal">
-                — Claude 3 · Bedrock
+                — Claude Sonnet 4.6 · Bedrock
               </span>
             </p>
-            <blockquote className="text-xs text-gray-200 leading-relaxed bg-gray-800/60 p-3 rounded-lg border border-gray-700/60 italic">
-              {assessment.reasoning}
+            <blockquote className="text-xs text-gray-200 leading-relaxed bg-gray-800/60 p-3 rounded-lg border border-gray-700/60">
+              <ReactMarkdown components={MD_COMPONENTS}>
+                {assessment.reasoning ?? ''}
+              </ReactMarkdown>
             </blockquote>
           </div>
 

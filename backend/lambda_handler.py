@@ -24,9 +24,11 @@ Deploy:
              + pip install -r requirements.txt -t .
 """
 
+import html
 import json
 import logging
 import os
+import re
 
 import boto3
 import requests
@@ -81,7 +83,14 @@ def call_bedrock_agent(data: dict, rules: str) -> dict:
     bedrock = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 
     # ── Prompt: inject rules + live sensor data ───────────────────────────
-    prompt = f"""You are HydroTwin, a disaster early-warning AI for floods and droughts.
+    # Audience for `reasoning` text: municipal authorities (mayors, civil
+    # protection, emergency coordinators) — smart non-experts. Plain language,
+    # markdown formatting, no meteorology jargon.
+    prompt = f"""You are HydroTwin, a flood and drought early-warning AI.
+Your audience is municipal authorities in Bulgaria — civil-protection officers, mayors,
+emergency-response coordinators. They are smart non-experts; they do not know what NDVI,
+SPI, SAR or NDWI mean. Translate everything into plain language.
+
 You are powered by Copernicus Earth Observation satellite data and real-time weather feeds.
 
 === METEOROLOGY RULES & THRESHOLDS (authoritative — do not override) ===
@@ -91,21 +100,32 @@ You are powered by Copernicus Earth Observation satellite data and real-time wea
 {json.dumps(data, indent=2)}
 
 Your task:
-1. Compare each sensor metric against the threshold rules above.
-2. Determine the single most severe status that applies.
-3. Respond ONLY with a valid JSON object — no markdown, no prose outside the JSON.
+1. Compare each sensor reading against the rules above.
+2. Decide the single most severe alert status that applies.
+3. Explain WHY in plain language a non-meteorologist can act on.
 
-Required JSON schema:
+Respond with a valid JSON object — no prose outside the JSON, no triple-backticks wrapping it.
+Schema:
 {{
   "status":     "<SAFE | DROUGHT_WATCH | DROUGHT_WARNING | FLOOD_WATCH | FLOOD_WARNING>",
   "confidence": <float 0.0–1.0>,
-  "reasoning":  "<one concise paragraph explaining which thresholds were triggered>"
-}}"""
+  "reasoning":  "<markdown string, 2–4 short paragraphs, under 600 chars>"
+}}
 
-    # ── Bedrock Converse API payload (Claude 3 Messages format) ───────────
+WRITING RULES for the `reasoning` field:
+- Format: markdown. Use **bold** to highlight 1–2 key numbers. Use a short bullet list (`- item`) only if you need to list 2+ breached conditions.
+- Open with a one-sentence headline summarising what's happening — NO jargon.
+- Then explain which 1–3 readings drove the decision in everyday terms.
+  Good: "soil is unusually dry at **10%**, well below the safe 15–75% range".
+  Bad:  "soil_moisture_pct below DROUGHT_WATCH threshold of 20%".
+- If relevant, end with one line on what to watch next (e.g. "If rainfall stays low into next week, this could escalate to a drought warning.").
+- DO NOT use the words "threshold", "metric", "index", or any internal status code (`DROUGHT_WATCH`, etc.) inside `reasoning`. Translate them.
+- DO NOT explain what NDVI / SPI / SAR / NDWI are. Just describe what they tell you (vegetation health, how dry compared to normal, water extent, etc.)."""
+
+    # ── Bedrock Messages API payload (Anthropic on Bedrock) ───────────────
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 512,
+        "max_tokens": 768,           # Bumped slightly — markdown formatting needs headroom
         "temperature": 0.1,          # Low temperature for deterministic assessment
         "messages": [
             {"role": "user", "content": prompt}
@@ -120,7 +140,7 @@ Required JSON schema:
             body=body,
         )
         raw  = json.loads(response["body"].read())
-        text = raw["content"][0]["text"]          # Claude 3 returns content blocks
+        text = raw["content"][0]["text"]          # Anthropic Messages API content blocks
         return json.loads(text)
 
     except Exception as exc:
@@ -131,11 +151,13 @@ Required JSON schema:
             "status":     "FLOOD_WATCH",
             "confidence": 0.78,
             "reasoning":  (
-                "[DEMO MODE — Bedrock unavailable] River levels in this zone have risen "
-                "0.8 m above the seasonal baseline over the past 72 hours. Soil "
-                "saturation is at 89 %. Precipitation forecast shows an additional "
-                "35 mm expected within 24 hours. Two FLOOD_WATCH thresholds are "
-                f"breached. (Live AI offline: {type(exc).__name__})"
+                "**Flood watch in effect — elevated risk over the next 24 hours.**\n\n"
+                "Recent observations show:\n"
+                "- River levels have risen **0.8 m** above the seasonal baseline in the past 3 days\n"
+                "- Ground saturation is high at **89%** — soils cannot absorb much more water\n"
+                "- A further **35 mm of rain** is forecast within the next 24 hours\n\n"
+                "If rainfall arrives as expected, watch for fast rises along the Vit and Osam rivers. "
+                f"_(Demo mode — live AI temporarily offline: {type(exc).__name__})_"
             ),
         }
 
@@ -199,12 +221,36 @@ def _send_discord(url: str, meta: dict, status: str, region: str, conf: int, rea
                 {"name": "Confidence", "value": f"{conf}%", "inline": True},
                 {"name": "Region",     "value": region,     "inline": True},
             ],
-            "footer": {"text": "HydroTwin · Copernicus EO + AWS Bedrock (Claude 3)"},
+            "footer": {"text": "HydroTwin · Copernicus EO + AWS Bedrock (Claude Sonnet 4.6)"},
         }],
     }
     resp = requests.post(url, json=payload, timeout=5)
     resp.raise_for_status()
     logger.info("Discord webhook delivered: HTTP %s", resp.status_code)
+
+
+def _md_to_html(s: str) -> str:
+    """
+    Convert the lightweight markdown subset Claude emits into Telegram-compatible
+    HTML. Discord renders markdown natively in embed descriptions; Telegram does
+    not (in HTML parse mode), so we translate **bold**, *italic*, `code`, and
+    `- ` bullet lines into their HTML / unicode equivalents. HTML-escapes the
+    plain text first so any `<`, `>`, `&` from Claude can't break the message.
+    """
+    # Escape first so user/model content cannot inject raw HTML
+    s = html.escape(s, quote=False)
+    # **bold** → <b>bold</b>   (greedy-safe via lazy match)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s, flags=re.DOTALL)
+    # __bold__ → <b>bold</b>
+    s = re.sub(r"__(.+?)__",     r"<b>\1</b>", s, flags=re.DOTALL)
+    # *italic* / _italic_ → <i>italic</i>   (avoid matching inside words)
+    s = re.sub(r"(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)", r"<i>\1</i>", s, flags=re.DOTALL)
+    s = re.sub(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)",   r"<i>\1</i>", s, flags=re.DOTALL)
+    # `code` → <code>code</code>
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    # bullet lines: leading "- " or "* " → "• "
+    s = re.sub(r"^[\-\*]\s+", "• ", s, flags=re.MULTILINE)
+    return s
 
 
 def _send_telegram(emoji: str, status: str, region: str, conf: int, reason: str) -> None:
@@ -213,8 +259,8 @@ def _send_telegram(emoji: str, status: str, region: str, conf: int, reason: str)
         f"{emoji} <b>HydroTwin Alert — {region}</b>\n\n"
         f"<b>Status:</b> {status}\n"
         f"<b>Confidence:</b> {conf}%\n\n"
-        f"{reason}\n\n"
-        f"<i>HydroTwin · Copernicus EO + AWS Bedrock (Claude 3)</i>"
+        f"{_md_to_html(reason)}\n\n"
+        f"<i>HydroTwin · Copernicus EO + AWS Bedrock (Claude Sonnet 4.6)</i>"
     )
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
     resp = requests.post(url, json=payload, timeout=5)
