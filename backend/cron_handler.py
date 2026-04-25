@@ -25,7 +25,8 @@ Deploy:
   Runtime  : Python 3.12
   Handler  : cron_handler.lambda_handler
   Memory   : 256 MB
-  Timeout  : 5 min  (N regions × ~15s buffer)
+  Timeout  : 15 min  (32 regions × ~10–15s each — bumped from 5 min when
+             municipalities were added to ALL_REGIONS, 2026-04-25)
   Trigger  : EventBridge Schedule, rate(30 minutes)
   IAM      : same as HydroTwin (Bedrock + Sentinel) PLUS dynamodb:GetItem,
              dynamodb:PutItem on arn:aws:dynamodb:<region>:<acct>:table/HydroTwinStatus
@@ -45,7 +46,7 @@ from decimal import Decimal
 import boto3
 
 from lambda_handler import assess_region, trigger_webhook
-from regions import REGIONS
+from regions import ALL_REGIONS, REGIONS
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger()
@@ -92,12 +93,16 @@ def _write_snapshot(region_id: str, assessment: dict) -> None:
     extractor) become Decimal automatically.
     """
     item = {
-        "region_id":   region_id,
-        "status":      assessment.get("status", "SAFE"),
-        "confidence":  assessment.get("confidence", 0),
-        "reasoning":   assessment.get("reasoning", ""),
-        "sources":     assessment.get("sources", []),
-        "assessed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "region_id":            region_id,
+        "status":               assessment.get("status", "SAFE"),
+        "confidence":           assessment.get("confidence", 0),
+        "reasoning":            assessment.get("reasoning", ""),
+        # V3-3: persist the 4-section structured reasoning alongside the legacy
+        # markdown blob so /status can hand it back to the frontend without a
+        # second LLM call. Empty dict is fine — DynamoDB accepts it.
+        "reasoning_structured": assessment.get("reasoning_structured", {}),
+        "sources":              assessment.get("sources", []),
+        "assessed_at":          datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     item = json.loads(json.dumps(item), parse_float=Decimal)
     _get_table().put_item(Item=item)
@@ -134,18 +139,28 @@ def lambda_handler(event: dict, context) -> dict:
 
     Returns a summary dict (visible in CloudWatch + manual `aws lambda invoke`).
     """
-    logger.info("HydroTwinCron run started — %d region(s)", len(REGIONS))
+    logger.info(
+        "HydroTwinCron run started — %d region(s) (%d oblast + %d municipality)",
+        len(ALL_REGIONS), len(REGIONS), len(ALL_REGIONS) - len(REGIONS),
+    )
 
     summary = {
-        "regions_total":     len(REGIONS),
-        "regions_succeeded": 0,
-        "regions_failed":    0,
-        "webhooks_fired":    0,
-        "transitions":       [],
-        "errors":            [],
+        "regions_total":            len(ALL_REGIONS),
+        "regions_succeeded":        0,
+        "regions_failed":           0,
+        "oblasts_processed":        0,
+        "municipalities_processed": 0,
+        "webhooks_fired":           0,
+        "transitions":              [],
+        "errors":                   [],
     }
 
-    for region_id, bbox in REGIONS.items():
+    # Oblasts are iterated first (REGIONS) so they always refresh even if a
+    # later municipality call hits the Lambda timeout. Webhooks fire only on
+    # oblast transitions — subscriptions are oblast-scoped and 29 muni-level
+    # alerts per cycle would be noise.
+    for region_id, bbox in ALL_REGIONS.items():
+        is_oblast = region_id in REGIONS
         try:
             prior        = _read_prior_status(region_id)
             prior_status = prior.get("status") if prior else None
@@ -155,7 +170,7 @@ def lambda_handler(event: dict, context) -> dict:
 
             _write_snapshot(region_id, assessment)
 
-            if _should_fire_webhook(prior, new_status):
+            if is_oblast and _should_fire_webhook(prior, new_status):
                 logger.info(
                     "Status transition for %s: %s → %s — firing webhook.",
                     region_id, prior_status, new_status,
@@ -169,11 +184,15 @@ def lambda_handler(event: dict, context) -> dict:
                 })
             else:
                 logger.info(
-                    "No transition for %s (still %s) — webhook skipped.",
-                    region_id, new_status,
+                    "No webhook for %s (status=%s, oblast=%s).",
+                    region_id, new_status, is_oblast,
                 )
 
             summary["regions_succeeded"] += 1
+            if is_oblast:
+                summary["oblasts_processed"] += 1
+            else:
+                summary["municipalities_processed"] += 1
 
         except Exception as exc:
             logger.error("Assess failed for %s: %s", region_id, exc, exc_info=True)

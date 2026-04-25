@@ -1,63 +1,88 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import MetricsSparkline from './MetricsSparkline';
-import DatePicker from './DatePicker';
-import CuratedEventChips from './CuratedEventChips';
+import MetricsSparkline   from './MetricsSparkline';
+import DatePicker         from './DatePicker';
+import CuratedEventChips  from './CuratedEventChips';
 
-// ── Markdown renderer overrides for the `reasoning` field ─────────────────────
-// The Lambda asks Claude to return reasoning as light markdown (bold, bullets).
-// These overrides keep the existing dark-theme blockquote look — no new styles.
+/**
+ * AlertPanel.jsx — AI Risk Assessment Panel (v3 + history-replay)
+ * ================================================================
+ *
+ * Two reasoning views:
+ *   1. **Structured** (V3-3): when assessment.reasoning_structured is present
+ *      with content, render 4 icon-prefixed sections matching the dashboard
+ *      mockup (📈 What's happening · 💧 Why it matters · 🌱 Current context ·
+ *      📋 Suggested next step). This is the live-mode default once the cron
+ *      has populated reasoning_structured in DynamoDB.
+ *   2. **Markdown blob fallback**: when reasoning_structured is missing or
+ *      empty (legacy /status row, archive replay, curated event), fall back
+ *      to ReactMarkdown rendering the original `reasoning` field.
+ *
+ * History-replay UI (Leny73 / 20260425-history-replay):
+ *   - DatePicker         — pick any past date → OpenMeteo archive fetch
+ *   - CuratedEventChips  — pre-baked NIMH reference events
+ *   - Replay banner      — visual cue separating archive vs curated vs live
+ *   - Metadata footer    — varies based on replay_kind
+ *
+ * Subscribe CTA is hidden in any replay mode (data is from the past — no
+ * sense subscribing for alerts about events that already happened).
+ *
+ * Responsive layout:
+ *   Mobile  (<640px) : full-width bottom sheet
+ *   Desktop (≥640px) : right sidebar, sized to fit between TopBar + DataSourcesBar
+ */
+
+// ── Markdown renderer overrides ──────────────────────────────────────────────
 const MD_COMPONENTS = {
   p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
   em:     ({ children }) => <em className="italic text-gray-300">{children}</em>,
-  ul:     ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 marker:text-cyan-500">{children}</ul>,
-  ol:     ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 marker:text-cyan-500">{children}</ol>,
+  ul:     ({ children }) => <ul className="list-disc list-inside space-y-1 my-1.5 marker:text-cyan-500">{children}</ul>,
+  ol:     ({ children }) => <ol className="list-decimal list-inside space-y-1 my-1.5 marker:text-cyan-500">{children}</ol>,
   li:     ({ children }) => <li className="ml-1">{children}</li>,
   code:   ({ children }) => <code className="px-1 py-0.5 bg-gray-900 rounded text-cyan-300 text-[11px]">{children}</code>,
   a:      ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="text-cyan-400 underline">{children}</a>,
 };
 
-/**
- * AlertPanel.jsx — AI Risk Assessment Panel
- * ==========================================
- *
- * Responsive layout:
- *   Mobile  (<640px) : full-width bottom sheet that slides up from the bottom,
- *                      covering ~65% of the screen with the map still visible.
- *   Desktop (≥640px) : fixed-width right sidebar (original design).
- *
- * Props:
- *   region                – currently selected region object (null = panel hidden)
- *   assessment            – { status, confidence, reasoning, region_id, replay?, replay_kind?, replay_date? }
- *   isLoading             – bool, true while fetch is in-flight
- *   error                 – string | null, non-fatal warning message
- *   onClose               – callback to dismiss the panel and return to the map
- *   replayDate            – ISO YYYY-MM-DD string, or null
- *   onReplayDateChange    – (iso | null) => void
- *   curatedEvents         – array of curated reference events for the region
- *   replayCuratedEvent    – currently active curated event, or null
- *   onCuratedEventSelect  – (event | null) => void
- */
-
-// ── Status metadata: maps each alert code to display properties ───────────────
+// ── Status metadata: maps each alert code to display properties ──────────────
 const STATUS_META = {
-  SAFE:            { bg: 'bg-emerald-950/60', border: 'border-emerald-500', dot: 'bg-emerald-400', icon: '✅', label: 'Safe'            },
-  DROUGHT_WATCH:   { bg: 'bg-yellow-950/60',  border: 'border-yellow-500',  dot: 'bg-yellow-400',  icon: '🟡', label: 'Drought Watch'   },
-  DROUGHT_WARNING: { bg: 'bg-orange-950/60',  border: 'border-orange-500',  dot: 'bg-orange-500',  icon: '🔴', label: 'Drought Warning' },
-  FLOOD_WATCH:     { bg: 'bg-blue-950/60',    border: 'border-blue-400',    dot: 'bg-blue-400',    icon: '🌊', label: 'Flood Watch'     },
-  FLOOD_WARNING:   { bg: 'bg-red-950/60',     border: 'border-red-500',     dot: 'bg-red-500',     icon: '🔴', label: 'Flood Warning'   },
+  SAFE:            { bg: 'bg-emerald-950/60', border: 'border-emerald-500', dot: 'bg-emerald-400', icon: '✅', label: 'Safe',            tag: 'NORMAL'   },
+  DROUGHT_WATCH:   { bg: 'bg-yellow-950/60',  border: 'border-yellow-500',  dot: 'bg-yellow-400',  icon: '🟡', label: 'Drought Watch',   tag: 'WATCH'    },
+  DROUGHT_WARNING: { bg: 'bg-orange-950/60',  border: 'border-orange-500',  dot: 'bg-orange-500',  icon: '🔴', label: 'Drought Warning', tag: 'WARNING'  },
+  FLOOD_WATCH:     { bg: 'bg-blue-950/60',    border: 'border-blue-400',    dot: 'bg-blue-400',    icon: '🌊', label: 'Flood Watch',     tag: 'WATCH'    },
+  FLOOD_WARNING:   { bg: 'bg-red-950/60',     border: 'border-red-500',     dot: 'bg-red-500',     icon: '🔴', label: 'Flood Warning',   tag: 'CRITICAL' },
 };
+const DEFAULT_META = STATUS_META.SAFE;
 
-const DEFAULT_META = STATUS_META['SAFE'];
+// 4-section descriptors. Sections with empty content are hidden so the panel
+// doesn't show empty headers when Bedrock partially populated the field.
+const SECTIONS = [
+  { key: 'whats_happening', icon: '📈', label: 'What is happening' },
+  { key: 'why_it_matters',  icon: '💧', label: 'Why it matters'    },
+  { key: 'current_context', icon: '🌱', label: 'Current context'   },
+  { key: 'next_step',       icon: '📋', label: 'Suggested next step' },
+];
 
-// Confidence bar colour: red if high (high confidence in a bad event), else
-// amber / green. This intentionally inverts the "green = good" heuristic so
-// the user reads it as "how certain is the AI of this threat?".
 function confidenceColor(pct) {
-  if (pct > 70) return '#EF4444'; // red   — high confidence in an alert
-  if (pct > 40) return '#F59E0B'; // amber — moderate confidence
-  return '#10B981';               // green — low confidence / likely safe
+  if (pct > 70) return '#EF4444';
+  if (pct > 40) return '#F59E0B';
+  return '#10B981';
+}
+
+function tagColor(tag) {
+  switch (tag) {
+    case 'NORMAL':   return '#10B981';
+    case 'WATCH':    return '#F59E0B';
+    case 'WARNING':  return '#F97316';
+    case 'CRITICAL': return '#EF4444';
+    case 'INFO':     return '#3B82F6';
+    default:         return '#94A3B8';
+  }
+}
+
+function shortRegionName(region) {
+  if (!region?.name) return '—';
+  return region.name.replace(/\s+Oblast\s*$/i, '');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,18 +98,13 @@ export default function AlertPanel({
   replayCuratedEvent   = null,
   onCuratedEventSelect = () => {},
 }) {
-  // ── Subscribe form state ──────────────────────────────────────────────────
-  // Hooks must be declared unconditionally — keep them above any early return.
-  const [formOpen,   setFormOpen]   = useState(false);
-  const [email,      setEmail]      = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [toast,      setToast]      = useState(null); // { kind: 'success' | 'error', msg } | null
-
-  // V2-6: Data Sources expand/collapse
+  // Hooks must come before early returns
+  const [formOpen,    setFormOpen]    = useState(false);
+  const [email,       setEmail]       = useState('');
+  const [submitting,  setSubmitting]  = useState(false);
+  const [toast,       setToast]       = useState(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
 
-  // Reset form whenever the user picks a different region — otherwise an
-  // open form / stale toast would leak across selections.
   useEffect(() => {
     setFormOpen(false);
     setEmail('');
@@ -93,15 +113,24 @@ export default function AlertPanel({
     setSourcesOpen(false);
   }, [region?.id]);
 
-  // Panel is invisible until a region has been selected (or a load is in-flight)
   if (!region && !isLoading) return null;
 
   const meta       = STATUS_META[assessment?.status] ?? DEFAULT_META;
   const pct        = assessment ? Math.round((assessment.confidence ?? 0) * 100) : 0;
   const isAlert    = ['DROUGHT_WARNING', 'FLOOD_WARNING'].includes(assessment?.status);
-  const replayKind = assessment?.replay_kind ?? null;        // 'archive' | 'curated' | null
+  const replayKind = assessment?.replay_kind ?? null;
   const isReplay   = Boolean(replayDate || replayCuratedEvent);
   const isCurated  = replayKind === 'curated';
+
+  // V3-3: prefer structured payload when present + non-empty.
+  const structured = assessment?.reasoning_structured;
+  const hasStructured =
+    !isReplay && structured && Object.values(structured).some(
+      v => typeof v === 'string' && v.trim().length > 0
+    );
+  const visibleSections = hasStructured
+    ? SECTIONS.filter(s => (structured[s.key] ?? '').trim().length > 0)
+    : [];
 
   const closeForm = () => {
     setFormOpen(false);
@@ -112,8 +141,6 @@ export default function AlertPanel({
   const submitSubscribe = async (e) => {
     e.preventDefault();
     const trimmed = email.trim();
-    // Basic client-side guard — backend revalidates, this just avoids
-    // wasting a round-trip on obvious typos.
     if (!/^\S+@\S+\.\S+$/.test(trimmed)) {
       setToast({ kind: 'error', msg: 'Please enter a valid email address.' });
       return;
@@ -136,8 +163,6 @@ export default function AlertPanel({
         setToast({ kind: 'success', msg: `✅ You're subscribed for ${region?.name}` });
         setEmail('');
         setFormOpen(false);
-        // Auto-clear success toast so the panel doesn't stay cluttered.
-        // Functional update guards against clobbering a newer error toast.
         setTimeout(() => {
           setToast((t) => (t && t.kind === 'success' ? null : t));
         }, 4000);
@@ -157,64 +182,72 @@ export default function AlertPanel({
         bg-gray-900/95 text-white overflow-y-auto
         transition-all duration-300 ease-in-out
 
-        /* ── Mobile: bottom sheet ───────────────────────────────── */
+        /* Mobile: bottom sheet */
         bottom-0 left-0 right-0 rounded-t-2xl
         max-h-[68vh]
 
-        /* ── Desktop: right sidebar ─────────────────────────────── */
-        sm:bottom-4 sm:left-auto sm:right-4 sm:top-14
-        sm:w-80 sm:rounded-xl sm:max-h-none
+        /* Desktop: right sidebar — sits below TopBar (h-16) and above DataSourcesBar (h-14) */
+        sm:bottom-[72px] sm:left-auto sm:right-4 sm:top-[80px]
+        sm:w-96 sm:rounded-xl sm:max-h-none
 
         ${assessment ? meta.border : 'border-gray-700'}
       `}
       aria-label="AI Risk Assessment Panel"
     >
-
-      {/* ── Drag handle — visible on mobile only ────────────────────────── */}
+      {/* Mobile drag handle */}
       <div className="sm:hidden flex justify-center -mt-1 mb-1" aria-hidden="true">
         <div className="w-10 h-1 bg-gray-600 rounded-full" />
       </div>
 
-      {/* ── Region Header + close button ─────────────────────────────────── */}
+      {/* Header: title + status tag + close */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">
-            Monitoring Zone
+            HydroTwin Alert
           </p>
-          <h2 className="text-base font-bold leading-snug text-white">
+          <h2 className="text-base font-bold leading-snug text-white truncate">
             {region?.name ?? '…'}
           </h2>
           {region?.description && (
-            <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
               {region.description}
             </p>
           )}
         </div>
-        {/* Close / back-to-map button */}
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 w-8 h-8 flex items-center justify-center
-                     rounded-full bg-gray-800 hover:bg-gray-700 active:scale-90
-                     text-gray-400 hover:text-white transition-all duration-150
-                     cursor-pointer"
-          aria-label="Close panel and return to map"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {assessment && (
+            <span
+              className="text-[10px] font-bold tracking-widest uppercase px-2 py-1 rounded"
+              style={{
+                backgroundColor: `${tagColor(meta.tag)}22`,
+                color:           tagColor(meta.tag),
+                border:          `1px solid ${tagColor(meta.tag)}55`,
+              }}
+            >
+              {meta.tag}
+            </span>
+          )}
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center
+                       rounded-full bg-gray-800 hover:bg-gray-700 active:scale-90
+                       text-gray-400 hover:text-white transition-all duration-150
+                       cursor-pointer"
+            aria-label="Close panel and return to map"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <hr className="border-gray-700/60" />
 
-      {/* ── Date Picker — pick any past day for real archive data ─────────── */}
-      {/* Reflects the active replay date OR the active curated event's peak date,
-          so the input always shows what the panel is rendering. Clearing the
-          input exits replay mode entirely (parent handler clears both). */}
+      {/* History-replay controls */}
       <DatePicker
         value={replayDate ?? replayCuratedEvent?.peakDate ?? null}
         onChange={onReplayDateChange}
       />
 
-      {/* ── Curated event chips — pre-baked snapshots ─────────────────────── */}
       {curatedEvents.length > 0 && (
         <CuratedEventChips
           events={curatedEvents}
@@ -223,7 +256,7 @@ export default function AlertPanel({
         />
       )}
 
-      {/* ── Replay banner — visual differs by replay_kind ─────────────────── */}
+      {/* Replay banner */}
       {isReplay && replayKind && (
         <div
           className={`flex items-center gap-2 px-3 py-2 rounded-lg
@@ -249,7 +282,7 @@ export default function AlertPanel({
         </div>
       )}
 
-      {/* ── Loading Skeleton ──────────────────────────────────────────────── */}
+      {/* Loading skeleton */}
       {isLoading && (
         <div className="flex flex-col gap-3 animate-pulse" aria-busy="true" aria-label="Loading assessment">
           <div className="h-7  w-2/3 bg-gray-700 rounded" />
@@ -258,15 +291,15 @@ export default function AlertPanel({
           <div className="h-2  w-4/6 bg-gray-700 rounded" />
           <div className="h-20 w-full bg-gray-700 rounded mt-2" />
           <p className="text-xs text-cyan-400 text-center pt-1">
-            Querying AWS Bedrock (Claude Sonnet 4.6)…
+            {isReplay ? 'Loading historical archive…' : 'Querying AWS Bedrock (Claude Sonnet)…'}
           </p>
         </div>
       )}
 
-      {/* ── Assessment Results ────────────────────────────────────────────── */}
+      {/* Assessment results */}
       {!isLoading && assessment && (
         <>
-          {/* ── Subscribe CTA — hidden in replay mode ─────────────────────── */}
+          {/* Subscribe CTA — hidden in replay mode */}
           {!isReplay && (!formOpen ? (
             <button
               onClick={() => { setToast(null); setFormOpen(true); }}
@@ -287,10 +320,7 @@ export default function AlertPanel({
               className="flex flex-col gap-2"
               aria-label={`Subscribe form for ${region?.name}`}
             >
-              <label
-                htmlFor="subscribe-email"
-                className="text-[10px] uppercase tracking-widest text-gray-400"
-              >
+              <label htmlFor="subscribe-email" className="text-[10px] uppercase tracking-widest text-gray-400">
                 Email Address
               </label>
               <input
@@ -337,7 +367,6 @@ export default function AlertPanel({
             </form>
           ))}
 
-          {/* ── Toast: success / error feedback (paired with Subscribe) — hidden in replay ─ */}
           {!isReplay && toast && (
             <div
               role={toast.kind === 'error' ? 'alert' : 'status'}
@@ -351,7 +380,7 @@ export default function AlertPanel({
             </div>
           )}
 
-          {/* ── Status Badge ──────────────────────────────────────────────── */}
+          {/* Status badge */}
           <div className={`p-3 rounded-lg border ${meta.bg} ${meta.border}`}>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
               Current Status
@@ -370,51 +399,48 @@ export default function AlertPanel({
             </div>
           </div>
 
-          {/* ── Confidence Score ──────────────────────────────────────────── */}
-          <div>
-            <div className="flex justify-between text-[10px] uppercase tracking-widest text-gray-400 mb-2">
-              <span>AI Confidence</span>
-              <span className="text-white font-bold">{pct}%</span>
+          {/* Reasoning — structured (V3) or markdown blob (replay/legacy fallback) */}
+          {hasStructured ? (
+            <div className="flex flex-col gap-3">
+              {visibleSections.map(s => (
+                <Section
+                  key={s.key}
+                  icon={s.icon}
+                  label={s.label}
+                  content={structured[s.key]}
+                />
+              ))}
             </div>
-            {/* Progress bar */}
-            <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700 ease-out"
-                style={{
-                  width:           `${pct}%`,
-                  backgroundColor: confidenceColor(pct),
-                }}
-                role="progressbar"
-                aria-valuenow={pct}
-                aria-valuemin={0}
-                aria-valuemax={100}
-              />
+          ) : (
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
+                {isReplay ? 'Event Reconstruction' : 'AI Reasoning'}{' '}
+                <span className="text-cyan-500 normal-case tracking-normal font-normal">
+                  {isCurated
+                    ? '— Curated reference narrative (NIMH archive)'
+                    : isReplay
+                    ? '— Derived from ERA5 reanalysis'
+                    : '— Claude Sonnet · Bedrock'}
+                </span>
+              </p>
+              <blockquote className="text-xs text-gray-200 leading-relaxed bg-gray-800/60 p-3 rounded-lg border border-gray-700/60">
+                <ReactMarkdown components={MD_COMPONENTS}>
+                  {assessment.reasoning ?? ''}
+                </ReactMarkdown>
+              </blockquote>
             </div>
+          )}
+
+          {/* Confidence + Status footer */}
+          <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-gray-700/60">
+            <FooterCell label="Status"     value={meta.tag}                color={tagColor(meta.tag)} />
+            <FooterCell label="Confidence" value={`${pct}%`}               color={confidenceColor(pct)} />
+            <FooterCell label="Region"     value={shortRegionName(region)} color="#94A3B8" />
           </div>
 
-          {/* ── AI Reasoning ──────────────────────────────────────────────── */}
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-              {isReplay ? 'Event Reconstruction' : 'AI Reasoning'}{' '}
-              <span className="text-cyan-500 normal-case tracking-normal font-normal">
-                {isCurated
-                  ? '— Curated reference narrative (NIMH archive)'
-                  : isReplay
-                  ? '— Derived from ERA5 reanalysis'
-                  : '— Claude Sonnet 4.6 · Bedrock'}
-              </span>
-            </p>
-            <blockquote className="text-xs text-gray-200 leading-relaxed bg-gray-800/60 p-3 rounded-lg border border-gray-700/60">
-              <ReactMarkdown components={MD_COMPONENTS}>
-                {assessment.reasoning ?? ''}
-              </ReactMarkdown>
-            </blockquote>
-          </div>
-
-          {/* ── Metrics Sparkline ─────────────────────────────────────────── */}
           <MetricsSparkline />
 
-          {/* ── Data Sources (V2-6) — collapsed by default; hidden if empty ── */}
+          {/* Data sources (collapsed) */}
           {Array.isArray(assessment.sources) && assessment.sources.length > 0 && (
             <div>
               <button
@@ -447,7 +473,7 @@ export default function AlertPanel({
             </div>
           )}
 
-          {/* ── Metadata Footer ───────────────────────────────────────────── */}
+          {/* Metadata footer — varies by replay kind */}
           <div className="text-[10px] text-gray-500 bg-gray-800/30 rounded-md p-2.5 border border-gray-800/60 leading-relaxed">
             {isCurated ? (
               <>
@@ -492,11 +518,9 @@ export default function AlertPanel({
               </>
             )}
           </div>
-
         </>
       )}
 
-      {/* ── Non-fatal API warning ─────────────────────────────────────────── */}
       {error && (
         <p
           className="text-[10px] text-yellow-400 border border-yellow-800/60
@@ -507,5 +531,40 @@ export default function AlertPanel({
         </p>
       )}
     </aside>
+  );
+}
+
+// ── Subcomponents ────────────────────────────────────────────────────────────
+
+function Section({ icon, label, content }) {
+  return (
+    <div className="flex gap-3">
+      <div
+        className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-800/80 border border-gray-700
+                   flex items-center justify-center text-base"
+        aria-hidden="true"
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-1">
+          {label}
+        </p>
+        <div className="text-xs text-gray-200 leading-relaxed">
+          <ReactMarkdown components={MD_COMPONENTS}>
+            {content}
+          </ReactMarkdown>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FooterCell({ label, value, color }) {
+  return (
+    <div>
+      <p className="text-[9px] uppercase tracking-widest text-gray-500 mb-0.5">{label}</p>
+      <p className="text-xs font-bold truncate" style={{ color }}>{value}</p>
+    </div>
   );
 }

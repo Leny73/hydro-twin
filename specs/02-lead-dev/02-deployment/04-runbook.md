@@ -3,7 +3,7 @@
 > Copy-paste commands for the most common operations on the live HydroTwin stack.
 > Assumes you're at the repo root (`C:\Users\dimib\Desktop\hydro-twin\`) in a bash shell, with AWS creds in `~/.aws/credentials` and Vercel token available.
 
-## 🗂️ v2 Stack inventory
+## 🗂️ Stack inventory
 
 | Resource | Name / ID | Notes |
 |---|---|---|
@@ -11,18 +11,20 @@
 | 🐍 Lambda — subscribe | `HydroTwinSubscribe` | `subscribe_handler.lambda_handler` · 128 MB · 10 s |
 | 🐍 Lambda — cron orchestrator | `HydroTwinCron` | `cron_handler.lambda_handler` · 256 MB · **5 min** |
 | 🐍 Lambda — status reader | `HydroTwinStatus` | `status_handler.lambda_handler` · 128 MB · 10 s |
-| 🔐 Shared role | `HydroTwinLambdaRole` | All 4 Lambdas use it (Bedrock + DynamoDB + CloudWatch) |
+| 🐍 Lambda — reports (v3) | `HydroTwinReports` | `reports_handler.lambda_handler` · 256 MB · 10 s |
+| 🔐 Shared role | `HydroTwinLambdaRole` | All 5 Lambdas use it (Bedrock + DynamoDB + CloudWatch) |
 | 🗄️ DynamoDB — subscriptions | `HydroTwinSubscriptions` | PK=`email`, SK=`region_id` |
 | 🗄️ DynamoDB — snapshots | `HydroTwinStatus` | PK=`region_id`, latest assessment per region |
+| 🗄️ DynamoDB — reports (v3) | `HydroTwinReports` | PK=`report_id` (UUID), citizen-submitted incidents |
 | ⏱️ EventBridge rule | `HydroTwinCronSchedule` | `rate(30 minutes)` → invokes `HydroTwinCron` |
-| 🌐 API Gateway (HTTP) | `sdnatb43dl` | `POST /assess` · `POST /subscribe` · `GET /status` |
+| 🌐 API Gateway (HTTP) | `sdnatb43dl` | `POST /assess` · `POST /subscribe` · `GET /status` · `POST/GET /reports` |
 | 🌐 Frontend | `https://hydrotwin.vercel.app` | Vercel project `hydrotwin` |
 
-**Key principle — single zip, four Lambdas.** `hydrotwin-backend.zip` ships every handler + shared module. Each Lambda config sets the right `Handler`, so one `update-function-code` per function with the same artefact keeps them all in sync.
+**Key principle — single zip, five Lambdas.** `hydrotwin-backend.zip` ships every handler + shared module. Each Lambda config sets the right `Handler`, so one `update-function-code` per function with the same artefact keeps them all in sync.
 
 ---
 
-## 🐍 Backend Lambda — code-only update (all 4 functions)
+## 🐍 Backend Lambda — code-only update (all 5 functions)
 
 When you change anything in `backend/*.py` or `backend/meteorology_rules.md`:
 
@@ -30,7 +32,7 @@ When you change anything in `backend/*.py` or `backend/meteorology_rules.md`:
 cd backend
 rm -rf .build && mkdir .build
 cp lambda_handler.py subscribe_handler.py cron_handler.py status_handler.py \
-   regions.py sentinel_extractor.py meteorology_rules.md .build/
+   reports_handler.py regions.py sentinel_extractor.py meteorology_rules.md .build/
 
 # Linux x86_64 wheels (must match Lambda runtime)
 pip install --target .build \
@@ -54,8 +56,8 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
 print('zip built:', os.path.getsize(out)//1024, 'KB')
 "
 
-# Push to ALL 4 Lambdas (same artefact)
-for fn in HydroTwin HydroTwinSubscribe HydroTwinCron HydroTwinStatus; do
+# Push to ALL 5 Lambdas (same artefact)
+for fn in HydroTwin HydroTwinSubscribe HydroTwinCron HydroTwinStatus HydroTwinReports; do
   python -m awscli lambda update-function-code \
     --function-name "$fn" \
     --zip-file fileb://../hydrotwin-backend.zip \
@@ -63,7 +65,7 @@ for fn in HydroTwin HydroTwinSubscribe HydroTwinCron HydroTwinStatus; do
 done
 
 # Wait for all to settle
-for fn in HydroTwin HydroTwinSubscribe HydroTwinCron HydroTwinStatus; do
+for fn in HydroTwin HydroTwinSubscribe HydroTwinCron HydroTwinStatus HydroTwinReports; do
   python -m awscli lambda wait function-updated --function-name "$fn" && echo "$fn settled"
 done
 
@@ -330,3 +332,90 @@ npx vercel deploy --prod --yes --token "$VERCEL_TOKEN"
 | `webhooks_fired` is 0 even after a real status change | Snapshot wasn't persisted on the prior run | Check CloudWatch `/aws/lambda/HydroTwinCron` for `put_item` errors; confirm the role has `dynamodb:PutItem` on `HydroTwinStatus` |
 | Discord channel gets a webhook every 30 min for the same status | De-dup logic regression | `cron_handler._should_fire_webhook` should compare prior vs new — re-read it; should return `False` when statuses match |
 | Frontend map polygons all neutral grey | `/status` fetch failed OR table is empty | Check browser DevTools → Network for `/status` response. If 200 with `regions: []`, kick the cron once. If 4xx/5xx, check API Gateway integration and the Lambda's CloudWatch logs |
+
+---
+
+## 🆕 v3 first-time setup — Reports table + Lambda + API routes
+
+The v3 sprint adds `/reports` (citizen incident reports). New AWS resources:
+
+### 1. Create the DynamoDB table
+
+```bash
+python -m awscli dynamodb create-table \
+  --table-name HydroTwinReports \
+  --attribute-definitions AttributeName=report_id,AttributeType=S \
+  --key-schema           AttributeName=report_id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+```
+
+### 2. Patch `HydroTwinLambdaRole` IAM with reports-table permissions
+
+Add a new inline policy or extend the existing `HydroTwinStatusDynamoDB` policy with `dynamodb:PutItem` + `dynamodb:Scan` on `arn:aws:dynamodb:us-east-1:<acct>:table/HydroTwinReports`.
+
+### 3. Create the `HydroTwinReports` Lambda
+
+```bash
+python -m awscli lambda create-function \
+  --function-name HydroTwinReports \
+  --runtime python3.12 \
+  --role arn:aws:iam::<acct>:role/HydroTwinLambdaRole \
+  --handler reports_handler.lambda_handler \
+  --zip-file fileb://hydrotwin-backend.zip \
+  --memory-size 256 --timeout 10 \
+  --environment "Variables={REPORTS_TABLE=HydroTwinReports}"
+```
+
+### 4. Wire the API Gateway routes
+
+Two routes share one Lambda integration:
+
+```bash
+# Replace these with your actual ids
+API_ID=sdnatb43dl
+LAMBDA_ARN=arn:aws:lambda:us-east-1:<acct>:function:HydroTwinReports
+
+# Create the integration
+INTEG_ID=$(python -m awscli apigatewayv2 create-integration \
+  --api-id "$API_ID" \
+  --integration-type AWS_PROXY \
+  --integration-uri  "$LAMBDA_ARN" \
+  --payload-format-version 1.0 \
+  --query 'IntegrationId' --output text)
+
+# Routes
+python -m awscli apigatewayv2 create-route --api-id "$API_ID" \
+  --route-key "POST /reports" --target "integrations/$INTEG_ID"
+python -m awscli apigatewayv2 create-route --api-id "$API_ID" \
+  --route-key "GET /reports"  --target "integrations/$INTEG_ID"
+python -m awscli apigatewayv2 create-route --api-id "$API_ID" \
+  --route-key "OPTIONS /reports" --target "integrations/$INTEG_ID"
+
+# Lambda permission so API Gateway can invoke it
+python -m awscli lambda add-permission \
+  --function-name HydroTwinReports \
+  --statement-id apigw-reports \
+  --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn "arn:aws:execute-api:us-east-1:<acct>:$API_ID/*/*/reports"
+```
+
+### 5. Smoke test
+
+```bash
+# Submit
+curl -sS -X POST https://sdnatb43dl.execute-api.us-east-1.amazonaws.com/reports \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email":"smoketest@example.com",
+    "region_id":"pleven",
+    "description":"Smoke-test report for the runbook.",
+    "lat":43.41, "lng":24.62
+  }'
+
+# List
+curl -sS https://sdnatb43dl.execute-api.us-east-1.amazonaws.com/reports | python -m json.tool
+```
+
+After this, `HydroTwinReports` joins the standard 5-Lambda code-update loop above — no special handling.

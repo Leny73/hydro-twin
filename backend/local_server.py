@@ -45,6 +45,7 @@ from lambda_handler    import lambda_handler as assess_handler
 from subscribe_handler import lambda_handler as subscribe_handler
 from status_handler    import lambda_handler as status_handler
 from cron_handler      import lambda_handler as cron_handler
+from reports_handler   import lambda_handler as reports_handler
 
 app = Flask(__name__)
 
@@ -89,6 +90,14 @@ def status():
     return _invoke_lambda(status_handler)
 
 
+@app.route("/reports", methods=["GET", "POST", "OPTIONS"])
+def reports():
+    """GET /reports → list all · POST /reports → submit a new incident report."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _invoke_lambda(reports_handler)
+
+
 @app.route("/cron-run", methods=["POST"])
 def cron_run():
     """
@@ -111,6 +120,7 @@ if __name__ == "__main__":
     print(f"  Assess endpoint:                http://localhost:{port}/assess     (POST)")
     print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe  (POST)")
     print(f"  Status endpoint:                http://localhost:{port}/status     (GET)")
+    print(f"  Reports endpoint:               http://localhost:{port}/reports    (GET, POST)")
     print(f"  Manual cron run:                http://localhost:{port}/cron-run   (POST)\n")
     print(f"  Set VITE_API_ENDPOINT=http://localhost:{port}/assess in frontend/.env.local\n")
     app.run(host="0.0.0.0", port=port, debug=True)

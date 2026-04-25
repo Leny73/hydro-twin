@@ -80,10 +80,12 @@ def call_bedrock_agent(data: dict, rules: str, region_name: str) -> dict:
 
     Returns:
         dict with keys:
-            status      – one of SAFE | DROUGHT_WATCH | DROUGHT_WARNING |
-                                  FLOOD_WATCH | FLOOD_WARNING
-            confidence  – float 0.0–1.0
-            reasoning   – concise assessment paragraph
+            status                – one of SAFE | DROUGHT_WATCH | DROUGHT_WARNING |
+                                            FLOOD_WATCH | FLOOD_WARNING
+            confidence            – float 0.0–1.0
+            reasoning             – concise markdown assessment paragraph (legacy)
+            reasoning_structured  – dict with 4 keys mapping to the v3 dashboard sections:
+                                    whats_happening, why_it_matters, current_context, next_step
     """
     bedrock = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 
@@ -121,8 +123,22 @@ Schema:
 {{
   "status":     "<SAFE | DROUGHT_WATCH | DROUGHT_WARNING | FLOOD_WATCH | FLOOD_WARNING>",
   "confidence": <float 0.0–1.0>,
-  "reasoning":  "<markdown string, 2–4 short paragraphs, under 600 chars>"
+  "reasoning":  "<markdown string, 2–4 short paragraphs, under 600 chars>",
+  "reasoning_structured": {{
+    "whats_happening":  "<1–2 sentences — plain summary of current conditions>",
+    "why_it_matters":   "<1–3 short bullet points OR 1–2 sentences — the key drivers with the actual numbers in **bold**>",
+    "current_context":  "<1–2 sentences — seasonal context, trend direction, what is normal vs not>",
+    "next_step":        "<1–2 sentences — concrete suggested action for municipal authorities>"
+  }}
 }}
+
+WRITING RULES for the `reasoning_structured` fields:
+- Same plain-language audience and voice as `reasoning` — no jargon, no internal status codes, no acronyms (NDVI / SPI / SAR / NDWI).
+- `whats_happening`: lead with the headline situation. NO numbers in this section — just the picture in plain words.
+- `why_it_matters`: this is the evidence. Put the 1–3 readings that drove the decision here, with the **actual numbers bolded**. Markdown bullets allowed if you list more than one driver.
+- `current_context`: situate the readings against seasonal normals or trends ("for late April this is below average", "soil moisture has been dropping for two weeks").
+- `next_step`: action-oriented. What should a mayor / civil-protection officer do today? E.g. "Pre-position pumps along the Vit", "Brief downstream villages", "Continue routine monitoring — no action needed".
+- Each section is its own short markdown string. Do NOT repeat the same sentence verbatim in `reasoning` and any structured field.
 
 WRITING RULES for the `reasoning` field:
 - Format: markdown. Use **bold** to highlight 1–2 key numbers. Use a short bullet list (`- item`) only if you need to list 2+ breached conditions.
@@ -138,7 +154,7 @@ WRITING RULES for the `reasoning` field:
     # ── Bedrock Messages API payload (Anthropic on Bedrock) ───────────────
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 768,           # Bumped slightly — markdown formatting needs headroom
+        "max_tokens": 1200,          # Higher cap for legacy markdown + 4 structured sections
         "temperature": 0.1,          # Low temperature for deterministic assessment
         "messages": [
             {"role": "user", "content": prompt}
@@ -172,6 +188,26 @@ WRITING RULES for the `reasoning` field:
                 "If rainfall arrives as expected, watch for fast rises along the Vit and Osam rivers. "
                 f"_(Demo mode — live AI temporarily offline: {type(exc).__name__})_"
             ),
+            "reasoning_structured": {
+                "whats_happening": (
+                    "Conditions across the area are trending toward elevated flood risk over the next "
+                    "24 hours. Rivers are running well above seasonal baseline and the ground is nearly "
+                    "saturated."
+                ),
+                "why_it_matters": (
+                    "- River levels are up **0.8 m** above the seasonal baseline in the past 3 days.\n"
+                    "- Soil saturation is at **89%** — the ground can't absorb much more water.\n"
+                    "- A further **35 mm of rain** is forecast within the next 24 hours."
+                ),
+                "current_context": (
+                    "Spring runoff is still elevated for this part of the year and the floodplain has "
+                    "limited remaining capacity for additional surface water."
+                ),
+                "next_step": (
+                    "Pre-position pumps along the Vit and Osam, brief downstream villages, and review "
+                    "evacuation routes for low-lying districts."
+                ),
+            },
         }
 
 
@@ -294,7 +330,8 @@ def assess_region(region_id: str, bbox: list) -> dict:
       - cron_handler   (EventBridge):  fires only on status-code transition
 
     Returns:
-        dict with keys: region_id, status, confidence, reasoning, sources
+        dict with keys: region_id, status, confidence, reasoning,
+                        reasoning_structured, sources
     """
     logger.info("Fetching EO data for bbox: %s", bbox)
     eo_data = get_eo_and_weather_data(bbox)
@@ -315,6 +352,20 @@ def assess_region(region_id: str, bbox: list) -> dict:
     region_name = REGION_NAMES.get(region_id, region_id)
     assessment = call_bedrock_agent(eo_data, rules_text, region_name)
     assessment["region_id"] = region_id
+
+    # V3-3: normalise `reasoning_structured` so downstream consumers don't have
+    # to defensive-code around partial Bedrock output. If the model returned
+    # the field but with missing keys, fill them with empty strings — the
+    # frontend hides empty sections gracefully.
+    structured = assessment.get("reasoning_structured")
+    if not isinstance(structured, dict):
+        structured = {}
+    assessment["reasoning_structured"] = {
+        "whats_happening": structured.get("whats_happening", "") or "",
+        "why_it_matters":  structured.get("why_it_matters",  "") or "",
+        "current_context": structured.get("current_context", "") or "",
+        "next_step":       structured.get("next_step",       "") or "",
+    }
 
     # V2-6: pass through extractor source string as a single-element array.
     # Future-ready for structured citations [{name, url, dataset_id}, ...].
