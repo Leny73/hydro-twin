@@ -201,6 +201,10 @@ const buildDemoResponse = (region) => ({
     'Nikopol area is at elevated risk — two of three FLOOD_WATCH thresholds are breached.',
 });
 
+// Maps GADM NAME_1 region name → HISTORICAL_EVENTS key so municipality clicks
+// can surface the same curated event chips as the parent oblast.
+const REGION_NAME_TO_ID = { Pleven: 'pleven', Yambol: 'yambol', Burgas: 'burgas' };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility: compute [lon_min, lat_min, lon_max, lat_max] from any GeoJSON geometry
 function bboxFromGeometry(geometry) {
@@ -236,10 +240,12 @@ export default function App() {
   const [replayLoading,      setReplayLoading]      = useState(false);
   const [replayError,        setReplayError]        = useState(null);
 
-  // Curated events available for the selected region.
+  // Curated events for the selected region — falls back to the parent oblast
+  // when a municipality is selected (municipalities share the oblast's events).
   const regionEvents = useMemo(() => {
     if (!selectedRegion) return [];
-    return HISTORICAL_EVENTS[selectedRegion.id] ?? [];
+    const key = selectedRegion.parentRegionId ?? selectedRegion.id;
+    return HISTORICAL_EVENTS[key] ?? [];
   }, [selectedRegion]);
 
   // When replayDate is set, fetch OpenMeteo Historical and build a synthetic
@@ -477,7 +483,8 @@ export default function App() {
   // the user's chosen date in the picker. Otherwise use OpenMeteo archive.
   const handleReplayDateChange = useCallback((iso) => {
     if (iso && selectedRegion) {
-      const events = HISTORICAL_EVENTS[selectedRegion.id] ?? [];
+      const key = selectedRegion.parentRegionId ?? selectedRegion.id;
+      const events = HISTORICAL_EVENTS[key] ?? [];
       const matched = events.find((ev) => iso >= ev.dateStart && iso <= ev.dateEnd);
       if (matched) {
         setReplayDate(iso);
@@ -538,10 +545,13 @@ export default function App() {
     if (feature.layer.id !== 'municipalities-fill') return;
     const bbox = bboxFromGeometry(feature.geometry);
     const muniRegion = {
-      id:          feature.properties.GID_2,
-      name:        feature.properties.NAME_2,
-      description: `${feature.properties.NAME_2} municipality — ${feature.properties.NAME_1} Region`,
+      id:             feature.properties.GID_2,
+      name:           feature.properties.NAME_2,
+      description:    `${feature.properties.NAME_2} municipality — ${feature.properties.NAME_1} Region`,
       bbox,
+      longitude:      (bbox[0] + bbox[2]) / 2,
+      latitude:       (bbox[1] + bbox[3]) / 2,
+      parentRegionId: REGION_NAME_TO_ID[feature.properties.NAME_1] ?? null,
     };
     setSelectedRegion(muniRegion);
     setError(null);
