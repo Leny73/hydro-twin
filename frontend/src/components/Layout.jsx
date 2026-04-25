@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useOutletContext } from 'react-router-dom';
-import Sidebar          from './Sidebar';
+import { Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import Sidebar, { MobileNav } from './Sidebar';
 import TopBar           from './TopBar';
 import DataSourcesBar   from './DataSourcesBar';
 
@@ -36,6 +36,11 @@ export default function Layout() {
   const [regionStatuses,    setRegionStatuses]    = useState([]);
   const [statusGeneratedAt, setStatusGeneratedAt] = useState(null);
   const [statusDemoMode,    setStatusDemoMode]    = useState(false);
+  const [mobileNavOpen,     setMobileNavOpen]     = useState(false);
+
+  // Auto-close the mobile drawer whenever the route changes
+  const location = useLocation();
+  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
 
   // Page-specific chrome (set by pages via the outlet context)
   const [pageMeta, setPageMeta] = useState({ title: 'Operational overview', subtitle: 'Clear insights. Timely action.', showSeverity: true });
@@ -86,12 +91,19 @@ export default function Layout() {
   return (
     <div className="flex w-screen h-screen bg-gray-950 font-mono text-white overflow-hidden">
       <Sidebar lastUpdated={lastUpdated} isStale={isStale} />
+      <MobileNav
+        lastUpdated={lastUpdated}
+        isStale={isStale}
+        isOpen={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+      />
 
       <div className="flex flex-col flex-1 min-w-0">
         <TopBar
           title={pageMeta.title}
           subtitle={pageMeta.subtitle}
           regionStatuses={pageMeta.showSeverity ? regionStatuses : undefined}
+          onMenuClick={() => setMobileNavOpen(true)}
         />
 
         <main className="flex-1 min-h-0 relative overflow-hidden">

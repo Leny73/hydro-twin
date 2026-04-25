@@ -8,6 +8,11 @@ import { useEffect, useState } from 'react';
  * the polygon fills are painted with, plus a relative "Updated X min ago"
  * line derived from the most recent `assessed_at` in the /status response.
  *
+ * Defaults to open on every breakpoint; user can collapse to a small chip
+ * via the chevron toggle (BF1-2). When live data is missing we no longer
+ * render an "Awaiting first run…" line — the sidebar's freshness widget
+ * already carries that info.
+ *
  * Stale-state UX: if the freshest snapshot is older than 60 minutes, the
  * timestamp turns yellow and prefixes ⚠️. Re-renders once a minute so the
  * relative time stays accurate without page reload.
@@ -41,6 +46,8 @@ function formatRelative(timestamp) {
 }
 
 export default function MapLegend({ lastUpdated, demoMode }) {
+  const [open, setOpen] = useState(true);
+
   // Tick once a minute so "X min ago" stays accurate without a page reload
   const [, force] = useState(0);
   useEffect(() => {
@@ -52,6 +59,25 @@ export default function MapLegend({ lastUpdated, demoMode }) {
   const isStale  = ageMs !== null && ageMs > STALE_AFTER_MS;
   const relative = formatRelative(lastUpdated);
 
+  // Collapsed chip — opens legend on click
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Show status legend"
+        aria-expanded="false"
+        className="absolute z-20 top-14 left-4 mt-2
+                   w-11 h-11 flex items-center justify-center
+                   bg-gray-900/85 backdrop-blur-md border border-gray-700
+                   rounded-lg cursor-pointer
+                   hover:border-gray-500 transition-colors"
+      >
+        <span className="text-base" aria-hidden="true">🗂️</span>
+      </button>
+    );
+  }
+
   return (
     <div
       className="absolute z-20 top-14 left-4 mt-2
@@ -60,9 +86,22 @@ export default function MapLegend({ lastUpdated, demoMode }) {
                  w-44"
       aria-label="Status legend"
     >
-      <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-1.5">
-        Status Legend
-      </p>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[9px] uppercase tracking-widest text-gray-400">
+          Status Legend
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Collapse status legend"
+          aria-expanded="true"
+          className="w-5 h-5 -my-1 -mr-1 flex items-center justify-center
+                     text-gray-500 hover:text-gray-200 cursor-pointer
+                     transition-colors"
+        >
+          <span className="text-sm leading-none" aria-hidden="true">−</span>
+        </button>
+      </div>
       <ul className="space-y-1 mb-2">
         {STATUSES.map(s => (
           <li key={s.code} className="flex items-center gap-2">
@@ -75,21 +114,19 @@ export default function MapLegend({ lastUpdated, demoMode }) {
           </li>
         ))}
       </ul>
-      <div className="border-t border-gray-700/60 pt-1.5">
-        {demoMode ? (
-          <p className="text-[9px] text-gray-500 leading-snug">
-            Live data offline
-          </p>
-        ) : relative ? (
-          <p className={`text-[9px] leading-snug ${isStale ? 'text-yellow-400' : 'text-gray-400'}`}>
-            {isStale && '⚠️ '}Updated {relative}
-          </p>
-        ) : (
-          <p className="text-[9px] text-gray-500 leading-snug">
-            Awaiting first run…
-          </p>
-        )}
-      </div>
+      {(demoMode || relative) && (
+        <div className="border-t border-gray-700/60 pt-1.5">
+          {demoMode ? (
+            <p className="text-[9px] text-gray-500 leading-snug">
+              Live data offline
+            </p>
+          ) : (
+            <p className={`text-[9px] leading-snug ${isStale ? 'text-yellow-400' : 'text-gray-400'}`}>
+              {isStale && '⚠️ '}Updated {relative}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

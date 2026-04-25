@@ -26,6 +26,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout    from './components/Layout';
 import Overview  from './pages/Overview';
 import Reports   from './pages/Reports';
+import Sources   from './pages/Sources';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/"        element={<Overview />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/sources" element={<Sources />} />
         </Route>
       </Routes>
     </BrowserRouter>

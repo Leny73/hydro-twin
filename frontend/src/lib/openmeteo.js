@@ -14,7 +14,36 @@
  * specs/06-history-replay/01-design.md (Tier B).
  */
 
-const ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive';
+const ARCHIVE_URL  = 'https://archive-api.open-meteo.com/v1/archive';
+const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+
+/**
+ * Fetch recent daily precipitation (mm) for a point, for the last N days.
+ * Uses the Forecast API with `past_days` because the Archive API lags ~5 d.
+ *
+ * @returns {Promise<{ date: string, value: number }[]>}  daily series, oldest first
+ */
+export async function fetchRecentPrecipSeries({ longitude, latitude, days = 14 }) {
+  const url = new URL(FORECAST_URL);
+  url.searchParams.set('latitude',       latitude);
+  url.searchParams.set('longitude',      longitude);
+  url.searchParams.set('daily',          'precipitation_sum');
+  url.searchParams.set('past_days',      String(days));
+  url.searchParams.set('forecast_days',  '1');
+  url.searchParams.set('timezone',       'auto');
+
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`OpenMeteo HTTP ${res.status}`);
+  const data = await res.json();
+
+  const dates  = data?.daily?.time ?? [];
+  const values = data?.daily?.precipitation_sum ?? [];
+  const points = dates.map((d, i) => ({
+    date:  d,
+    value: Number.isFinite(values[i]) ? Number(values[i]) : 0,
+  }));
+  return points.slice(-days);
+}
 
 // ── Threshold rules — simplified from backend/meteorology_rules.md ──────────
 // The full ruleset is the authoritative one in the Bedrock prompt. This is a

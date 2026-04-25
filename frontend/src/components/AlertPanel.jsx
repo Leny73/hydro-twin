@@ -1,31 +1,29 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import MetricsSparkline   from './MetricsSparkline';
+import PrecipitationChart from './PrecipitationChart';
+import CycloneChart       from './CycloneChart';
 import DatePicker         from './DatePicker';
 import CuratedEventChips  from './CuratedEventChips';
 
 /**
- * AlertPanel.jsx — AI Risk Assessment Panel (v3 + history-replay)
- * ================================================================
+ * AlertPanel.jsx — AI Risk Assessment Panel (v3 + BF1-4 hierarchy)
+ * ==================================================================
  *
- * Two reasoning views:
- *   1. **Structured** (V3-3): when assessment.reasoning_structured is present
- *      with content, render 4 icon-prefixed sections matching the dashboard
- *      mockup (📈 What's happening · 💧 Why it matters · 🌱 Current context ·
- *      📋 Suggested next step). This is the live-mode default once the cron
- *      has populated reasoning_structured in DynamoDB.
- *   2. **Markdown blob fallback**: when reasoning_structured is missing or
- *      empty (legacy /status row, archive replay, curated event), fall back
- *      to ReactMarkdown rendering the original `reasoning` field.
+ * BF1-4 layout (top → bottom):
+ *   1. Header           — region name + status tag + close
+ *   2. Replay banner    — only when in replay mode (compact)
+ *   3. Current status   — colored badge with icon (top of fold)
+ *   4. AI Confidence    — labelled progress bar
+ *   5. Subscribe CTA    — hidden in replay mode
+ *   6. AI Reasoning     — structured (4 sections) or markdown blob
+ *   7. Sparkline        — small trend chart
+ *   8. Replay & past events — collapsible (DatePicker + CuratedEventChips),
+ *                             closed by default, auto-opens when in replay
+ *   9. Metadata footer  — compact provenance line (data source, timestamp)
  *
- * History-replay UI (Leny73 / 20260425-history-replay):
- *   - DatePicker         — pick any past date → OpenMeteo archive fetch
- *   - CuratedEventChips  — pre-baked NIMH reference events
- *   - Replay banner      — visual cue separating archive vs curated vs live
- *   - Metadata footer    — varies based on replay_kind
- *
- * Subscribe CTA is hidden in any replay mode (data is from the past — no
- * sense subscribing for alerts about events that already happened).
+ * Removed (BF1-4 + BF1-5):
+ *   - 3-cell Status/Confidence/Region footer grid (duplicated everything above)
+ *   - Per-region "Data Sources" collapsible block (sources live on /sources)
  *
  * Responsive layout:
  *   Mobile  (<640px) : full-width bottom sheet
@@ -54,8 +52,6 @@ const STATUS_META = {
 };
 const DEFAULT_META = STATUS_META.SAFE;
 
-// 4-section descriptors. Sections with empty content are hidden so the panel
-// doesn't show empty headers when Bedrock partially populated the field.
 const SECTIONS = [
   { key: 'whats_happening', icon: '📈', label: 'What is happening' },
   { key: 'why_it_matters',  icon: '💧', label: 'Why it matters'    },
@@ -80,11 +76,6 @@ function tagColor(tag) {
   }
 }
 
-function shortRegionName(region) {
-  if (!region?.name) return '—';
-  return region.name.replace(/\s+Oblast\s*$/i, '');
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AlertPanel({
   region,
@@ -98,20 +89,26 @@ export default function AlertPanel({
   replayCuratedEvent   = null,
   onCuratedEventSelect = () => {},
 }) {
-  // Hooks must come before early returns
   const [formOpen,    setFormOpen]    = useState(false);
   const [email,       setEmail]       = useState('');
   const [submitting,  setSubmitting]  = useState(false);
   const [toast,       setToast]       = useState(null);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [replayOpen,  setReplayOpen]  = useState(false);
 
+  // Reset transient state when region changes
   useEffect(() => {
     setFormOpen(false);
     setEmail('');
     setSubmitting(false);
     setToast(null);
-    setSourcesOpen(false);
+    setReplayOpen(false);
   }, [region?.id]);
+
+  // Auto-expand replay section whenever the user is actually in replay mode
+  const isReplay = Boolean(replayDate || replayCuratedEvent);
+  useEffect(() => {
+    if (isReplay) setReplayOpen(true);
+  }, [isReplay]);
 
   if (!region && !isLoading) return null;
 
@@ -119,7 +116,6 @@ export default function AlertPanel({
   const pct        = assessment ? Math.round((assessment.confidence ?? 0) * 100) : 0;
   const isAlert    = ['DROUGHT_WARNING', 'FLOOD_WARNING'].includes(assessment?.status);
   const replayKind = assessment?.replay_kind ?? null;
-  const isReplay   = Boolean(replayDate || replayCuratedEvent);
   const isCurated  = replayKind === 'curated';
 
   // V3-3: prefer structured payload when present + non-empty.
@@ -178,7 +174,7 @@ export default function AlertPanel({
     <aside
       className={`
         fixed z-30
-        flex flex-col gap-4 p-5 border backdrop-blur-md
+        flex flex-col border backdrop-blur-md
         bg-gray-900/95 text-white overflow-y-auto
         transition-all duration-300 ease-in-out
 
@@ -194,69 +190,58 @@ export default function AlertPanel({
       `}
       aria-label="AI Risk Assessment Panel"
     >
-      {/* Mobile drag handle */}
-      <div className="sm:hidden flex justify-center -mt-1 mb-1" aria-hidden="true">
-        <div className="w-10 h-1 bg-gray-600 rounded-full" />
-      </div>
+      {/* ── Sticky top (BF2-5): drag handle + header always visible ── */}
+      <div className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur-md
+                      border-b border-gray-700/50
+                      px-5 pt-4 pb-3 flex flex-col gap-2">
+        <div className="sm:hidden flex justify-center" aria-hidden="true">
+          <div className="w-10 h-1 bg-gray-600 rounded-full" />
+        </div>
 
-      {/* Header: title + status tag + close */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">
-            HydroTwin Alert
-          </p>
-          <h2 className="text-base font-bold leading-snug text-white truncate">
-            {region?.name ?? '…'}
-          </h2>
-          {region?.description && (
-            <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
-              {region.description}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">
+              HydroTwin Alert
             </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {assessment && (
-            <span
-              className="text-[10px] font-bold tracking-widest uppercase px-2 py-1 rounded"
-              style={{
-                backgroundColor: `${tagColor(meta.tag)}22`,
-                color:           tagColor(meta.tag),
-                border:          `1px solid ${tagColor(meta.tag)}55`,
-              }}
+            <h2 className="text-base font-bold leading-snug text-white truncate">
+              {region?.name ?? '…'}
+            </h2>
+            {region?.description && (
+              <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                {region.description}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {assessment && (
+              <span
+                className="text-[10px] font-bold tracking-widest uppercase px-2 py-1 rounded"
+                style={{
+                  backgroundColor: `${tagColor(meta.tag)}22`,
+                  color:           tagColor(meta.tag),
+                  border:          `1px solid ${tagColor(meta.tag)}55`,
+                }}
+              >
+                {meta.tag}
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center
+                         rounded-full bg-gray-800 hover:bg-gray-700 active:scale-90
+                         text-gray-400 hover:text-white transition-all duration-150
+                         cursor-pointer"
+              aria-label="Close panel and return to map"
             >
-              {meta.tag}
-            </span>
-          )}
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center
-                       rounded-full bg-gray-800 hover:bg-gray-700 active:scale-90
-                       text-gray-400 hover:text-white transition-all duration-150
-                       cursor-pointer"
-            aria-label="Close panel and return to map"
-          >
-            ✕
-          </button>
+              ✕
+            </button>
+          </div>
         </div>
       </div>
 
-      <hr className="border-gray-700/60" />
-
-      {/* History-replay controls */}
-      <DatePicker
-        value={replayDate ?? replayCuratedEvent?.peakDate ?? null}
-        onChange={onReplayDateChange}
-      />
-
-      {curatedEvents.length > 0 && (
-        <CuratedEventChips
-          events={curatedEvents}
-          selectedEventId={replayCuratedEvent?.id ?? null}
-          onSelect={onCuratedEventSelect}
-        />
-      )}
-
-      {/* Replay banner */}
+      {/* ── Scrollable body ────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 px-5 pt-4 pb-5">
+      {/* ── Replay banner (only when active) ───────────────────────── */}
       {isReplay && replayKind && (
         <div
           className={`flex items-center gap-2 px-3 py-2 rounded-lg
@@ -282,7 +267,7 @@ export default function AlertPanel({
         </div>
       )}
 
-      {/* Loading skeleton */}
+      {/* ── Loading skeleton ───────────────────────────────────────── */}
       {isLoading && (
         <div className="flex flex-col gap-3 animate-pulse" aria-busy="true" aria-label="Loading assessment">
           <div className="h-7  w-2/3 bg-gray-700 rounded" />
@@ -296,10 +281,32 @@ export default function AlertPanel({
         </div>
       )}
 
-      {/* Assessment results */}
+      {/* ── Assessment results ─────────────────────────────────────── */}
       {!isLoading && assessment && (
         <>
-          {/* Subscribe CTA — hidden in replay mode */}
+          {/* 3. Current status — top of the fold */}
+          <div className={`p-3 rounded-lg border ${meta.bg} ${meta.border}`}>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
+              Current Status
+            </p>
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`w-3 h-3 rounded-full flex-shrink-0 ${meta.dot} ${isAlert ? 'animate-pulse' : ''}`}
+                aria-hidden="true"
+              />
+              <span className="text-sm font-bold tracking-wide">
+                {meta.label}
+              </span>
+              <span className="ml-auto text-base" role="img" aria-label={meta.label}>
+                {meta.icon}
+              </span>
+            </div>
+          </div>
+
+          {/* 4. AI confidence — labelled progress bar */}
+          <ConfidenceBar pct={pct} />
+
+          {/* 5. Subscribe CTA — hidden in replay mode */}
           {!isReplay && (!formOpen ? (
             <button
               onClick={() => { setToast(null); setFormOpen(true); }}
@@ -380,26 +387,7 @@ export default function AlertPanel({
             </div>
           )}
 
-          {/* Status badge */}
-          <div className={`p-3 rounded-lg border ${meta.bg} ${meta.border}`}>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-              Current Status
-            </p>
-            <div className="flex items-center gap-2.5">
-              <span
-                className={`w-3 h-3 rounded-full flex-shrink-0 ${meta.dot} ${isAlert ? 'animate-pulse' : ''}`}
-                aria-hidden="true"
-              />
-              <span className="text-sm font-bold tracking-wide">
-                {meta.label}
-              </span>
-              <span className="ml-auto text-base" role="img" aria-label={meta.label}>
-                {meta.icon}
-              </span>
-            </div>
-          </div>
-
-          {/* Reasoning — structured (V3) or markdown blob (replay/legacy fallback) */}
+          {/* 6. AI reasoning — structured (V3) or markdown blob fallback */}
           {hasStructured ? (
             <div className="flex flex-col gap-3">
               {visibleSections.map(s => (
@@ -431,49 +419,32 @@ export default function AlertPanel({
             </div>
           )}
 
-          {/* Confidence + Status footer */}
-          <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-gray-700/60">
-            <FooterCell label="Status"     value={meta.tag}                color={tagColor(meta.tag)} />
-            <FooterCell label="Confidence" value={`${pct}%`}               color={confidenceColor(pct)} />
-            <FooterCell label="Region"     value={shortRegionName(region)} color="#94A3B8" />
-          </div>
+          {/* 7a. Precipitation chart (real OpenMeteo 14-day series) */}
+          <PrecipitationChart region={region} />
 
-          <MetricsSparkline />
+          {/* 7b. Synoptic cyclone field (Windy.com embed centred on region) */}
+          <CycloneChart region={region} />
 
-          {/* Data sources (collapsed) */}
-          {Array.isArray(assessment.sources) && assessment.sources.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setSourcesOpen(o => !o)}
-                className="w-full flex items-center justify-between
-                           text-[10px] uppercase tracking-widest text-gray-400
-                           hover:text-gray-200 transition-colors mb-1.5
-                           cursor-pointer"
-                aria-expanded={sourcesOpen}
-                aria-controls="data-sources-list"
-              >
-                <span>📚 Data Sources ({assessment.sources.length})</span>
-                <span className="text-gray-500 text-base leading-none">
-                  {sourcesOpen ? '−' : '+'}
-                </span>
-              </button>
-              {sourcesOpen && (
-                <ul
-                  id="data-sources-list"
-                  className="text-xs text-gray-300 leading-relaxed
-                             bg-gray-800/40 p-3 rounded-lg border border-gray-700/40
-                             space-y-1.5 list-disc list-inside marker:text-cyan-500"
-                >
-                  {assessment.sources.map((src, i) => (
-                    <li key={i} className="ml-1">{String(src)}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          {/* 8. Replay & past events — collapsible */}
+          <CollapsibleSection
+            title="🕓 Replay & past events"
+            isOpen={replayOpen}
+            onToggle={() => setReplayOpen(o => !o)}
+          >
+            <DatePicker
+              value={replayDate ?? replayCuratedEvent?.peakDate ?? null}
+              onChange={onReplayDateChange}
+            />
+            {curatedEvents.length > 0 && (
+              <CuratedEventChips
+                events={curatedEvents}
+                selectedEventId={replayCuratedEvent?.id ?? null}
+                onSelect={onCuratedEventSelect}
+              />
+            )}
+          </CollapsibleSection>
 
-          {/* Metadata footer — varies by replay kind */}
+          {/* 9. Compact metadata footer */}
           <div className="text-[10px] text-gray-500 bg-gray-800/30 rounded-md p-2.5 border border-gray-800/60 leading-relaxed">
             {isCurated ? (
               <>
@@ -530,6 +501,7 @@ export default function AlertPanel({
           ⚠️ {error}
         </p>
       )}
+      </div>
     </aside>
   );
 }
@@ -560,11 +532,52 @@ function Section({ icon, label, content }) {
   );
 }
 
-function FooterCell({ label, value, color }) {
+function ConfidenceBar({ pct }) {
+  const color = confidenceColor(pct);
   return (
     <div>
-      <p className="text-[9px] uppercase tracking-widest text-gray-500 mb-0.5">{label}</p>
-      <p className="text-xs font-bold truncate" style={{ color }}>{value}</p>
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
+        <span>AI Confidence</span>
+        <span className="font-bold" style={{ color }}>{pct}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="AI confidence"
+        className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden"
+      >
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, isOpen, onToggle, children }) {
+  return (
+    <div className="border-t border-gray-700/60 pt-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between
+                   text-[10px] uppercase tracking-widest text-gray-400
+                   hover:text-gray-200 transition-colors mb-2 cursor-pointer"
+        aria-expanded={isOpen}
+      >
+        <span>{title}</span>
+        <span className="text-gray-500 text-base leading-none" aria-hidden="true">
+          {isOpen ? '−' : '+'}
+        </span>
+      </button>
+      {isOpen && (
+        <div className="flex flex-col gap-3">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

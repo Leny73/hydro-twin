@@ -1,18 +1,34 @@
+import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 
 /**
- * Sidebar.jsx — fixed-width left navigation
- * ============================================
+ * Sidebar.jsx — left navigation (static + mobile drawer)
+ * ========================================================
  *
- * Always-visible nav for the v3 dashboard chrome:
- *   - Logo + brand
- *   - Page links (Overview, Reports)
- *   - "Last updated" widget pinned to the bottom
+ * Two exports share one nav definition:
+ *   - <Sidebar />    static, fixed-width, visible only at lg+ (≥1024 px)
+ *   - <MobileNav />  fullscreen drawer with backdrop, visible only below lg
  *
- * Receives `lastUpdated` and `staleHours` from the parent so the freshness
- * indicator stays in sync with the map's snapshot data without a second
- * fetch or context provider.
+ * Layout owns the `mobileNavOpen` state and wires the TopBar hamburger to
+ * <MobileNav onClose>. Tapping a nav link inside the drawer auto-closes.
  */
+
+const NAV_LINKS = [
+  { to: '/',         end: true,  icon: '🏠', label: 'Overview' },
+  { to: '/reports',              icon: '📋', label: 'Reports'  },
+  { to: '/sources',              icon: '📚', label: 'Sources'  },
+];
+
+function navClass({ isActive }) {
+  return [
+    'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold',
+    'min-h-[44px]',
+    'transition-colors duration-150',
+    isActive
+      ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-800/60'
+      : 'text-gray-400 hover:text-gray-100 hover:bg-gray-900',
+  ].join(' ');
+}
 
 function formatRelative(iso) {
   if (!iso) return '—';
@@ -27,15 +43,48 @@ function formatRelative(iso) {
   return `${diffD} d ago`;
 }
 
-export default function Sidebar({ lastUpdated, isStale }) {
+function formatDateCaption(iso) {
+  if (!iso) return 'Awaiting first update';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const isToday = d.toDateString() === new Date().toDateString();
+  if (isToday) return `Today, ${time}`;
+  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${date} · ${time}`;
+}
+
+function LatestUpdateCard({ lastUpdated, isStale }) {
+  const accent = isStale
+    ? { ring: 'border-yellow-700/60 bg-yellow-950/40', dot: 'bg-yellow-950 border-yellow-700', big: 'text-yellow-200' }
+    : { ring: 'border-cyan-800/40 bg-cyan-950/30',     dot: 'bg-cyan-950 border-cyan-700/60',  big: 'text-cyan-200'   };
+
   return (
-    <aside
-      className="hidden lg:flex flex-col w-[200px] flex-shrink-0
-                 bg-gray-950 border-r border-gray-800
-                 z-30"
-      aria-label="Primary navigation"
+    <div
+      className={`mx-3 mb-3 p-3 rounded-lg border flex items-center gap-3 ${accent.ring}`}
+      aria-label="Latest data update"
     >
-      {/* ── Brand ─────────────────────────────────────────────────────────── */}
+      <div className={`w-10 h-10 rounded-full border flex items-center justify-center flex-shrink-0 ${accent.dot}`}>
+        <span className="text-lg" aria-hidden="true">{isStale ? '⚠️' : '🕒'}</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[9px] uppercase tracking-widest text-gray-500 leading-none mb-1">
+          Latest Update
+        </p>
+        <p className={`text-base font-bold leading-tight truncate ${accent.big}`}>
+          {formatRelative(lastUpdated)}
+        </p>
+        <p className="text-[10px] text-gray-500 leading-tight truncate mt-0.5">
+          {formatDateCaption(lastUpdated)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function NavContent({ lastUpdated, isStale, onLinkClick }) {
+  return (
+    <>
       <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-800">
         <span className="text-2xl select-none" aria-hidden="true">💧</span>
         <span className="text-base font-bold tracking-widest text-cyan-400 uppercase">
@@ -43,31 +92,85 @@ export default function Sidebar({ lastUpdated, isStale }) {
         </span>
       </div>
 
-      {/* ── Nav links ─────────────────────────────────────────────────────── */}
       <nav className="flex flex-col px-3 py-4 gap-1 flex-1" aria-label="Pages">
-        <NavLink to="/"        end className={navClass}>🏠 <span>Overview</span></NavLink>
-        <NavLink to="/reports"     className={navClass}>📋 <span>Reports</span></NavLink>
+        {NAV_LINKS.map(link => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            end={link.end}
+            className={navClass}
+            onClick={onLinkClick}
+          >
+            <span aria-hidden="true">{link.icon}</span>
+            <span>{link.label}</span>
+          </NavLink>
+        ))}
       </nav>
 
-      {/* ── Last-updated widget (bottom) ──────────────────────────────────── */}
-      <div className="px-4 py-4 border-t border-gray-800 text-[11px] text-gray-400 leading-relaxed">
-        <p className="uppercase tracking-widest text-[9px] text-gray-500 mb-1">
-          Last updated
-        </p>
-        <p className={`font-semibold ${isStale ? 'text-yellow-400' : 'text-gray-200'}`}>
-          {isStale && '⚠️ '}{formatRelative(lastUpdated)}
-        </p>
-      </div>
+      <LatestUpdateCard lastUpdated={lastUpdated} isStale={isStale} />
+    </>
+  );
+}
+
+export default function Sidebar({ lastUpdated, isStale }) {
+  return (
+    <aside
+      className="hidden lg:flex flex-col w-[200px] flex-shrink-0
+                 bg-gray-950 border-r border-gray-800 z-30"
+      aria-label="Primary navigation"
+    >
+      <NavContent lastUpdated={lastUpdated} isStale={isStale} />
     </aside>
   );
 }
 
-function navClass({ isActive }) {
-  return [
-    'flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold',
-    'transition-colors duration-150',
-    isActive
-      ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-800/60'
-      : 'text-gray-400 hover:text-gray-100 hover:bg-gray-900',
-  ].join(' ');
+export function MobileNav({ lastUpdated, isStale, isOpen, onClose }) {
+  // Lock body scroll + close on Escape while drawer is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen, onClose]);
+
+  return (
+    <>
+      <div
+        className={`lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm
+                    transition-opacity duration-200
+                    ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        className={`lg:hidden fixed top-0 bottom-0 left-0 z-50 w-[260px] max-w-[80vw]
+                    bg-gray-950 border-r border-gray-800 flex flex-col
+                    transition-transform duration-200 ease-out
+                    ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        aria-label="Primary navigation"
+        aria-hidden={!isOpen}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close navigation menu"
+          className="absolute top-2 right-2 w-11 h-11 flex items-center justify-center
+                     rounded-md text-gray-400 hover:text-white hover:bg-gray-800
+                     cursor-pointer"
+        >
+          <span className="text-xl leading-none" aria-hidden="true">✕</span>
+        </button>
+        <NavContent
+          lastUpdated={lastUpdated}
+          isStale={isStale}
+          onLinkClick={onClose}
+        />
+      </aside>
+    </>
+  );
 }

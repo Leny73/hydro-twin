@@ -229,7 +229,7 @@ const buildDemoResponse = (region) => ({
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Overview() {
-  const { regionStatuses, statusDemoMode, patchRegionStatus, setPageMeta } = useDashboardContext();
+  const { regionStatuses, statusDemoMode, lastUpdated, patchRegionStatus, setPageMeta } = useDashboardContext();
 
   useEffect(() => {
     setPageMeta({
@@ -604,7 +604,7 @@ export default function Overview() {
       </Map>
 
       <MapLegend
-        position="top-right"
+        lastUpdated={lastUpdated}
         demoMode={statusDemoMode}
       />
 
@@ -628,7 +628,7 @@ export default function Overview() {
                      text-gray-400 text-xs px-5 py-2.5 rounded-full
                      pointer-events-none select-none"
         >
-          Tap a region label or a Pleven municipality to view assessment
+          Tap a region to view assessment
         </div>
       )}
     </div>
