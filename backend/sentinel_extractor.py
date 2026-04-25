@@ -352,12 +352,6 @@ def get_eo_and_weather_data(bbox: list) -> dict:
         else "OpenMeteo only (Sentinel Hub credentials not set — NDVI/NDWI are estimated)"
     )
 
-    
-    ndvi=get_ndvi()
-    print(ndvi)
-
-    vv_vh_logratio=get_vv_vh_logratio()
-    print(vv_vh_logratio)
 
 
     return {
