@@ -89,9 +89,9 @@ const SELECTED_LAYER = {
 };
 
 const INITIAL_VIEW_STATE = {
-  longitude: 24.62,
+  longitude: 24.55,
   latitude:  43.42,
-  zoom:      9.0,
+  zoom:      7.5,
 };
 
 // ── Simulated demo response (shown when the live API is unavailable) ──────────
