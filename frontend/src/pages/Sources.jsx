@@ -67,6 +67,38 @@ const SOURCES = [
     cadence: 'Daily bulletins · WMO 1991-2020 normals',
     href:    'https://www.meteo.bg/en/',
   },
+  {
+    icon:    '🌿',
+    name:    'WMO — World Meteorological Organization',
+    family:  'United Nations Specialised Agency',
+    what:    'Standardized Precipitation Index (SPI) user guide and drought indicator handbooks — basis for drought threshold calibration and classification rules.',
+    cadence: 'Reference standards',
+    href:    'https://who.int/',
+  },
+  {
+    icon:    '🌍',
+    name:    'World Bank CCKP — Bulgaria',
+    family:  'Climate Change Knowledge Portal',
+    what:    'Bulgaria climate context for the 1991–2020 climatology derived from observed historical data. Used to understand current climate conditions and future climate scenarios for regional baseline calibration.',
+    cadence: 'Annual updates',
+    href:    'https://climateknowledgeportal.worldbank.org/country/bulgaria/climate-data-historical',
+  },
+  {
+    icon:    '🔬',
+    name:    'IPCC',
+    family:  'Intergovernmental Panel on Climate Change',
+    what:    'Climate risk scenarios and extreme event projections — long-term context for flood and drought risk assessment in Bulgaria.',
+    cadence: 'Assessment cycles every 5–7 years',
+    href:    'https://www.ipcc.ch/',
+  },
+  {
+    icon:    '📊',
+    name:    'Eurostat',
+    family:  'Statistical Office of the European Union',
+    what:    'EU-level environmental and climate statistics — regional context for Bulgaria\'s flood and drought exposure across oblasts.',
+    cadence: 'Annual updates',
+    href:    'https://ec.europa.eu/eurostat/web/main/home',
+  },
 ];
 
 export default function Sources() {
