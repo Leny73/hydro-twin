@@ -1,0 +1,9 @@
+,precision,recall,f1-score,support
+SAFE,1.0,1.0,1.0,57.0
+LOW_RISK,1.0,1.0,1.0,9.0
+MODERATE_RISK,0.0,0.0,0.0,0.0
+HIGH_RISK,0.0,0.0,0.0,0.0
+VERY_HIGH_RISK,0.0,0.0,0.0,0.0
+accuracy,1.0,1.0,1.0,1.0
+macro avg,0.4,0.4,0.4,66.0
+weighted avg,1.0,1.0,1.0,66.0

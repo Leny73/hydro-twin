@@ -31,7 +31,7 @@ import os
 import boto3
 import requests
 
-from sentinel_extractor import get_eo_and_weather_data
+from backend.sentinel_extractor import get_eo_and_weather_data
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger()

@@ -1,0 +1,2 @@
+confidence_bin,n,accuracy,mean_abs_error,mean_confidence
+"(0.8, 1.0]",66,1.0,0.0,0.96792936

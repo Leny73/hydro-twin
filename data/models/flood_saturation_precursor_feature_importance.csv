@@ -1,0 +1,8 @@
+feature,importance
+feature_t_minus_1_week_of_year,0.2383636
+feature_t_minus_1_soil_moisture_7d_delta,0.16190845
+feature_t_minus_1_precip_mm_30d,0.15746969
+feature_t_minus_1_soil_moisture_pct,0.1403304
+feature_t_minus_1_precip_mm_7d,0.11573851
+feature_t_minus_1_s1_moisture,0.10829512
+feature_t_minus_1_ndwi,0.07789418

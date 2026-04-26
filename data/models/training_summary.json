@@ -1,32 +1,103 @@
 [
   {
-    "target_name": "final_flood_score_log",
-    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_xgboost.json",
-    "metrics_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_metrics.csv",
-    "importance_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_feature_importance.csv",
-    "plot_path": "C:\\Users\\alexr\\hydro-twin\\data\\plots\\model_flood_prediction.png",
+    "target_name": "flood_risk_level",
+    "model_stem": "flood_saturation_precursor",
+    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_saturation_precursor_xgboost.json",
+    "report_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_saturation_precursor_classification_report.csv",
+    "importance_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_saturation_precursor_feature_importance.csv",
+    "confusion_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_saturation_precursor_confusion_matrix.csv",
+    "plot_path": "C:\\Users\\alexr\\hydro-twin\\data\\plots\\model_flood_saturation_precursor_prediction.png",
     "metrics": {
-      "rows_test": 12,
-      "mae": 0.11268441376394132,
-      "rmse": 0.16496266148933622,
-      "r2": -0.14215778043024296,
-      "target_mean_test": 0.13654868330776224,
-      "target_std_test": 0.15435567582335652
+      "rows_total": 328,
+      "rows_train": 262,
+      "rows_test": 66,
+      "features": 7,
+      "accuracy": 0.7424242424242424,
+      "balanced_accuracy": 0.5233918128654971,
+      "macro_f1": 0.20746460746460746,
+      "weighted_f1": 0.7573417573417575,
+      "ordinal_mae": 0.25757575757575757,
+      "baseline_accuracy": 0.8636363636363636,
+      "baseline_balanced_accuracy": 0.5,
+      "baseline_macro_f1": 0.18536585365853658,
+      "baseline_ordinal_mae": 0.13636363636363635,
+      "accuracy_improvement_vs_baseline": -0.12121212121212122,
+      "balanced_accuracy_improvement_vs_baseline": 0.023391812865497075,
+      "macro_f1_improvement_vs_baseline": 0.022098753806070875,
+      "ordinal_mae_improvement_vs_baseline": -0.12121212121212122,
+      "class_mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 2
+      }
     }
   },
   {
-    "target_name": "final_drought_score_log",
-    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_xgboost.json",
-    "metrics_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_metrics.csv",
+    "target_name": "flood_risk_level",
+    "model_stem": "flood_detection",
+    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_detection_xgboost.json",
+    "report_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_detection_classification_report.csv",
+    "importance_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_detection_feature_importance.csv",
+    "confusion_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\flood_detection_confusion_matrix.csv",
+    "plot_path": "C:\\Users\\alexr\\hydro-twin\\data\\plots\\model_flood_detection_prediction.png",
+    "metrics": {
+      "rows_total": 328,
+      "rows_train": 262,
+      "rows_test": 66,
+      "features": 7,
+      "accuracy": 1.0,
+      "balanced_accuracy": 1.0,
+      "macro_f1": 0.4,
+      "weighted_f1": 1.0,
+      "ordinal_mae": 0.0,
+      "baseline_accuracy": 0.8636363636363636,
+      "baseline_balanced_accuracy": 0.5,
+      "baseline_macro_f1": 0.18536585365853658,
+      "baseline_ordinal_mae": 0.13636363636363635,
+      "accuracy_improvement_vs_baseline": 0.13636363636363635,
+      "balanced_accuracy_improvement_vs_baseline": 0.5,
+      "macro_f1_improvement_vs_baseline": 0.21463414634146344,
+      "ordinal_mae_improvement_vs_baseline": 0.13636363636363635,
+      "class_mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 2
+      }
+    }
+  },
+  {
+    "target_name": "drought_risk_level",
+    "model_stem": "drought",
+    "model_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_risk_xgboost.json",
+    "report_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_classification_report.csv",
     "importance_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_feature_importance.csv",
+    "confusion_path": "C:\\Users\\alexr\\hydro-twin\\data\\models\\drought_confusion_matrix.csv",
     "plot_path": "C:\\Users\\alexr\\hydro-twin\\data\\plots\\model_drought_prediction.png",
     "metrics": {
-      "rows_test": 12,
-      "mae": 0.15050894496533,
-      "rmse": 0.19159028321761387,
-      "r2": -2.1438350552516248,
-      "target_mean_test": 0.13204158924410836,
-      "target_std_test": 0.10805468541734929
+      "rows_total": 328,
+      "rows_train": 262,
+      "rows_test": 66,
+      "features": 6,
+      "accuracy": 0.8181818181818182,
+      "balanced_accuracy": 0.5714285714285715,
+      "macro_f1": 0.2902165795369679,
+      "weighted_f1": 0.8396134609726842,
+      "ordinal_mae": 0.18181818181818182,
+      "baseline_accuracy": 0.8484848484848485,
+      "baseline_balanced_accuracy": 0.3333333333333333,
+      "baseline_macro_f1": 0.18360655737704917,
+      "baseline_ordinal_mae": 0.18181818181818182,
+      "accuracy_improvement_vs_baseline": -0.030303030303030276,
+      "balanced_accuracy_improvement_vs_baseline": 0.2380952380952382,
+      "macro_f1_improvement_vs_baseline": 0.10661002215991872,
+      "ordinal_mae_improvement_vs_baseline": 0.0,
+      "class_mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4
+      }
     }
   }
 ]
