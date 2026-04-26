@@ -1,0 +1,4 @@
+aoi_name,date_start,date_end,target_date,item_id,asset_key,valid_pixels,flood_pixels,aoi_area_km2,gfm_flooded_area_km2,gfm_flood_fraction,flood_detected,flood_label_binary,flood_label_3tier,binary_threshold_km2,tier_minor_km2,tier_significant_km2,source,gfm_items,gfm_items_used,gfm_asset_keys,errors
+pleven_small,2026-03-28,2026-04-26,2026-04-26,ENSEMBLE_FLOOD_20260424T042913_VV_EU020M_E057N009T3,tuw_flood_extent,55736,1847,24.9819,0.7388,0.029573,1,1,1,0.5,0.5,5.0,GFM_STAC:GFM,77,77,tuw_flood_extent,
+pleven_levski,2026-03-28,2026-04-26,2026-04-26,ENSEMBLE_FLOOD_20260424T042913_VV_EU020M_E057N009T3,tuw_flood_extent,2656755,636228,1617.3999,254.4912,0.157346,1,1,2,0.5,0.5,5.0,GFM_STAC:GFM,77,77,tuw_flood_extent,
+danube_belene_svishtov,2026-03-28,2026-04-26,2026-04-26,ENSEMBLE_FLOOD_20260424T042913_VV_EU020M_E057N009T3,tuw_flood_extent,1501789,341431,895.9858,136.5724,0.152427,1,1,2,0.5,0.5,5.0,GFM_STAC:GFM,77,77,tuw_flood_extent,
