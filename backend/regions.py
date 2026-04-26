@@ -110,3 +110,30 @@ REGION_NAMES: dict[str, str] = {
 }
 
 KNOWN_REGIONS = frozenset(REGIONS.keys())
+
+
+# Map every municipality back to its parent oblast. Used by /subscribe to roll
+# clicks on a small polygon up to a single subscription per oblast — one
+# email per real event instead of one per municipality.
+_OBLAST_PREFIX = {
+    "BGR.2.":  "burgas",
+    "BGR.13.": "pleven",
+    "BGR.28.": "yambol",
+}
+
+
+def parent_oblast(region_id: str) -> str:
+    """
+    Resolve any region_id to its parent oblast id.
+
+    - Oblast ids ("burgas", "pleven", "yambol") are returned unchanged.
+    - Municipality ids ("BGR.2.7_1", "BGR.13.6_1", ...) roll up to the oblast.
+    - Anything unrecognised is returned unchanged so the caller can reject it.
+    """
+    rid = (region_id or "").strip()
+    if rid in REGIONS:
+        return rid
+    for prefix, oblast in _OBLAST_PREFIX.items():
+        if rid.startswith(prefix):
+            return oblast
+    return rid

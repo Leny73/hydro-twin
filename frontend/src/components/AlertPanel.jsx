@@ -76,6 +76,22 @@ function tagColor(tag) {
   }
 }
 
+// ── Subscribe channels ──────────────────────────────────────────────────────
+// Shape mirrors what the backend accepts in POST /subscribe:
+//   email        → required, always on
+//   discord      → optional per-user webhook URL, fan-out from cron
+//   sms          → blocked on AWS SNS sandbox approval (notifications.send_sms is a stub)
+//   telegram     → blocked on per-user bot UX (notifications.send_telegram_to_user is a stub)
+const CHANNELS = [
+  { id: 'email',    icon: '📧', label: 'Email',    enabled: true,  required: true  },
+  { id: 'discord',  icon: '💬', label: 'Discord',  enabled: true,  required: false },
+  { id: 'sms',      icon: '📱', label: 'SMS',      enabled: false, required: false },
+  { id: 'telegram', icon: '✈️', label: 'Telegram', enabled: false, required: false },
+];
+
+// Discord webhook URL shape — kept loose, the backend re-validates strictly.
+const DISCORD_WEBHOOK_RE = /^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/;
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AlertPanel({
   region,
@@ -89,17 +105,23 @@ export default function AlertPanel({
   replayCuratedEvent   = null,
   onCuratedEventSelect = () => {},
 }) {
-  const [formOpen,    setFormOpen]    = useState(false);
-  const [email,       setEmail]       = useState('');
-  const [submitting,  setSubmitting]  = useState(false);
-  const [toast,       setToast]       = useState(null);
-  const [replayOpen,  setReplayOpen]  = useState(false);
-  const [chatOpen,    setChatOpen]    = useState(false);
+  const [formOpen,        setFormOpen]        = useState(false);
+  const [email,           setEmail]           = useState('');
+  const [discordEnabled,  setDiscordEnabled]  = useState(false);
+  const [discordWebhook,  setDiscordWebhook]  = useState('');
+  const [discordHelpOpen, setDiscordHelpOpen] = useState(false);
+  const [submitting,      setSubmitting]      = useState(false);
+  const [toast,           setToast]           = useState(null);
+  const [replayOpen,      setReplayOpen]      = useState(false);
+  const [chatOpen,        setChatOpen]        = useState(false);
 
   // Reset transient state when region changes
   useEffect(() => {
     setFormOpen(false);
     setEmail('');
+    setDiscordEnabled(false);
+    setDiscordWebhook('');
+    setDiscordHelpOpen(false);
     setSubmitting(false);
     setToast(null);
     setReplayOpen(false);
@@ -132,37 +154,92 @@ export default function AlertPanel({
   const closeForm = () => {
     setFormOpen(false);
     setEmail('');
+    setDiscordEnabled(false);
+    setDiscordWebhook('');
+    setDiscordHelpOpen(false);
     setToast(null);
   };
 
   const submitSubscribe = async (e) => {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!/^\S+@\S+\.\S+$/.test(trimmed)) {
+
+    const trimmedEmail = email.trim();
+    if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
       setToast({ kind: 'error', msg: 'Please enter a valid email address.' });
       return;
     }
+
+    let trimmedWebhook = '';
+    if (discordEnabled) {
+      trimmedWebhook = discordWebhook.trim();
+      if (!DISCORD_WEBHOOK_RE.test(trimmedWebhook)) {
+        setToast({
+          kind: 'error',
+          msg:  "Discord webhook URL doesn't look right — copy the full URL from Server Settings → Integrations → Webhooks.",
+        });
+        return;
+      }
+    }
+
     setToast(null);
     setSubmitting(true);
     try {
       const base = import.meta.env.VITE_API_ENDPOINT ?? '';
       const url  = base.replace('/assess', '/subscribe');
+      const body = {
+        email:     trimmedEmail,
+        region_id: region?.id,
+      };
+      if (trimmedWebhook) body.discord_webhook = trimmedWebhook;
+
       const res  = await fetch(url, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email: trimmed, region_id: region?.id }),
+        body:    JSON.stringify(body),
       });
-      if (res.status === 400) {
-        setToast({ kind: 'error', msg: 'That email was rejected — please double-check it.' });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409) {
+        setToast({
+          kind: 'info',
+          msg:  `You're already subscribed to ${region?.name}.`,
+        });
+      } else if (res.status === 400) {
+        setToast({
+          kind: 'error',
+          msg:  data?.error ?? 'Subscription rejected — please review the form.',
+        });
       } else if (!res.ok) {
-        setToast({ kind: 'error', msg: `Subscription failed (${res.status}). Please try again.` });
+        setToast({
+          kind: 'error',
+          msg:  `Subscription failed (${res.status}). Please try again.`,
+        });
       } else {
-        setToast({ kind: 'success', msg: `✅ You're subscribed for ${region?.name}` });
+        const channels = [];
+        if (data?.delivered?.email)   channels.push('email');
+        if (data?.delivered?.discord) channels.push('Discord');
+        const detail = channels.length
+          ? ` Welcome message sent via ${channels.join(' + ')}.`
+          : ' Welcome message will arrive shortly.';
+        // Backend rolls municipality clicks up to the parent oblast — surface
+        // that to the user so the toast matches what they actually got.
+        const targetName  = data?.region_name ?? region?.name;
+        const rolledUp    = data?.rolled_up_to && data?.requested_region_id;
+        const rollupHint  = rolledUp && region?.name && targetName !== region.name
+          ? ` (covers ${region.name})`
+          : '';
+        setToast({
+          kind: 'success',
+          msg:  `✅ Subscribed to ${targetName}${rollupHint}.${detail}`,
+        });
         setEmail('');
+        setDiscordEnabled(false);
+        setDiscordWebhook('');
+        setDiscordHelpOpen(false);
         setFormOpen(false);
         setTimeout(() => {
           setToast((t) => (t && t.kind === 'success' ? null : t));
-        }, 4000);
+        }, 6000);
       }
     } catch {
       setToast({ kind: 'error', msg: 'Network error — check your connection and retry.' });
@@ -346,29 +423,111 @@ export default function AlertPanel({
           ) : (
             <form
               onSubmit={submitSubscribe}
-              className="flex flex-col gap-2"
+              className="flex flex-col gap-3"
               aria-label={`Subscribe form for ${region?.name}`}
             >
-              <label htmlFor="subscribe-email" className="text-[10px] uppercase tracking-widest text-gray-400">
-                Email Address
-              </label>
-              <input
-                id="subscribe-email"
-                type="email"
-                autoComplete="email"
-                autoFocus
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={submitting}
-                placeholder="you@example.com"
-                aria-invalid={toast?.kind === 'error' ? 'true' : 'false'}
-                className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
-                           rounded-lg text-sm text-white placeholder-gray-500
-                           focus:outline-none focus:border-cyan-500
-                           disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-              <div className="flex gap-2">
+              {/* Channel picker — 4 icons in a row, 2 active + 2 "soon" */}
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
+                  Choose channels
+                </p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <ChannelButton
+                    icon="📧" label="Email"
+                    state="required"
+                    disabled={submitting}
+                  />
+                  <ChannelButton
+                    icon="💬" label="Discord"
+                    state={discordEnabled ? 'on' : 'off'}
+                    disabled={submitting}
+                    onClick={() => {
+                      setDiscordEnabled(v => !v);
+                      if (discordEnabled) setDiscordHelpOpen(false);
+                    }}
+                  />
+                  <ChannelButton
+                    icon="📱" label="SMS"
+                    state="soon"
+                    title="Awaiting AWS SNS approval — coming soon"
+                  />
+                  <ChannelButton
+                    icon="✈️" label="Telegram"
+                    state="soon"
+                    title="Per-user Telegram bot — coming soon"
+                  />
+                </div>
+              </div>
+
+              {/* Email input — always visible (required) */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="subscribe-email" className="text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
+                  <span aria-hidden="true">📧</span> Email Address
+                </label>
+                <input
+                  id="subscribe-email"
+                  type="email"
+                  autoComplete="email"
+                  autoFocus
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={submitting}
+                  placeholder="you@example.com"
+                  aria-invalid={toast?.kind === 'error' ? 'true' : 'false'}
+                  className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
+                             rounded-lg text-sm text-white placeholder-gray-500
+                             focus:outline-none focus:border-cyan-500
+                             disabled:opacity-60 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              {/* Discord webhook input — only when channel is enabled */}
+              {discordEnabled && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="subscribe-discord" className="text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
+                    <span aria-hidden="true">💬</span> Discord Webhook URL
+                  </label>
+                  <input
+                    id="subscribe-discord"
+                    type="url"
+                    inputMode="url"
+                    value={discordWebhook}
+                    onChange={(e) => setDiscordWebhook(e.target.value)}
+                    disabled={submitting}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    spellCheck={false}
+                    className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
+                               rounded-lg text-xs font-mono text-white placeholder-gray-500
+                               focus:outline-none focus:border-cyan-500
+                               disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDiscordHelpOpen(o => !o)}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 self-start
+                               cursor-pointer flex items-center gap-1"
+                    aria-expanded={discordHelpOpen}
+                  >
+                    <span>{discordHelpOpen ? '−' : 'ⓘ'}</span>
+                    <span>How do I get a Discord webhook?</span>
+                  </button>
+                  {discordHelpOpen && (
+                    <ol className="text-[11px] text-gray-300 leading-relaxed
+                                   bg-gray-800/60 border border-gray-700/60 rounded-lg
+                                   p-3 list-decimal list-inside space-y-1
+                                   marker:text-cyan-500">
+                      <li>Open Discord → right-click your server → <strong className="text-white">Server Settings</strong></li>
+                      <li>Go to <strong className="text-white">Integrations → Webhooks</strong></li>
+                      <li>Click <strong className="text-white">New Webhook</strong>, pick a channel</li>
+                      <li>Click <strong className="text-white">Copy Webhook URL</strong> and paste it above</li>
+                    </ol>
+                  )}
+                </div>
+              )}
+
+              {/* Submit row */}
+              <div className="flex gap-2 pt-1">
                 <button
                   type="submit"
                   disabled={submitting}
@@ -379,7 +538,7 @@ export default function AlertPanel({
                                 ? 'bg-red-600 hover:bg-red-500 text-white'
                                 : 'bg-cyan-800 hover:bg-cyan-700 text-white'}`}
                 >
-                  {submitting ? 'Subscribing…' : 'Confirm'}
+                  {submitting ? 'Subscribing…' : 'Confirm Subscribe'}
                 </button>
                 <button
                   type="button"
@@ -403,7 +562,9 @@ export default function AlertPanel({
               className={`text-[11px] px-3 py-2 rounded-md text-center leading-relaxed border
                 ${toast.kind === 'success'
                   ? 'bg-emerald-950/50 border-emerald-700/70 text-emerald-200'
-                  : 'bg-red-950/50 border-red-700/70 text-red-200'}`}
+                  : toast.kind === 'info'
+                    ? 'bg-cyan-950/50 border-cyan-700/70 text-cyan-200'
+                    : 'bg-red-950/50 border-red-700/70 text-red-200'}`}
             >
               {toast.msg}
             </div>
@@ -418,6 +579,7 @@ export default function AlertPanel({
                   icon={s.icon}
                   label={s.label}
                   content={structured[s.key]}
+                  accentColor={s.key === 'next_step' ? alertColor : undefined}
                 />
               ))}
             </div>
@@ -549,7 +711,7 @@ export default function AlertPanel({
           borderColor: alertColor,
           boxShadow: `0 0 32px ${alertColor}28, inset 0 1px 0 ${alertColor}18`,
         }}
-        aria-label="HydroSentry Chat Assistant"
+        aria-label="HydroAgent Chat Assistant"
         role="dialog"
       >
         <AlertChat
@@ -565,7 +727,17 @@ export default function AlertPanel({
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function Section({ icon, label, content }) {
+function Section({ icon, label, content, accentColor }) {
+  // `accentColor` turns the section LABEL into a tinted pill — same hue as
+  // the panel frame, so the call-out reads as part of the alert visual.
+  const labelStyle = accentColor
+    ? {
+        backgroundColor: `${accentColor}1F`,  // ~12% fill
+        borderColor:     `${accentColor}66`,  // ~40% stroke
+        color:            accentColor,
+      }
+    : undefined;
+
   return (
     <div className="flex gap-3">
       <div
@@ -576,7 +748,14 @@ function Section({ icon, label, content }) {
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-1">
+        <p
+          className={
+            accentColor
+              ? 'inline-flex items-center text-[10px] uppercase tracking-widest font-semibold mb-1.5 px-2 py-0.5 rounded-full border'
+              : 'text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-1'
+          }
+          style={labelStyle}
+        >
           {label}
         </p>
         <div className="text-xs text-gray-200 leading-relaxed">
@@ -643,6 +822,55 @@ function AssessmentSources({ sources, isReplay }) {
         </p>
       )}
     </div>
+  );
+}
+
+// ── Channel picker button ────────────────────────────────────────────────────
+// Square card showing icon + label + a small status pill ("Default" / "On" /
+// "Off" / "Soon"). Required + Soon are non-clickable; the latter is greyed out
+// because the backend channel hasn't been provisioned yet.
+function ChannelButton({ icon, label, state, onClick, disabled, title }) {
+  const isRequired = state === 'required';
+  const isSoon     = state === 'soon';
+  const isOn       = state === 'on';
+  const inactive   = isSoon || disabled;
+
+  const styles = isSoon
+    ? 'border-gray-800/70 bg-gray-900/40 text-gray-500 cursor-not-allowed'
+    : isRequired
+      ? 'border-cyan-600/60 bg-cyan-950/30 text-cyan-100 cursor-default'
+      : isOn
+        ? 'border-cyan-500/80 bg-cyan-950/50 text-cyan-100 cursor-pointer hover:border-cyan-400'
+        : 'border-gray-700 bg-gray-800/40 text-gray-300 cursor-pointer hover:border-gray-600 hover:bg-gray-800/60';
+
+  const pillText = isRequired ? 'Default'
+                  : isSoon    ? 'Soon'
+                  : isOn      ? 'On'
+                              : 'Off';
+  const pillColor = isRequired ? 'text-cyan-300'
+                   : isSoon    ? 'text-gray-600'
+                   : isOn      ? 'text-cyan-300'
+                               : 'text-gray-500';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={inactive || isRequired}
+      title={title}
+      aria-pressed={isOn}
+      aria-disabled={inactive}
+      className={`flex flex-col items-center justify-center gap-0.5
+                  px-1.5 py-2 rounded-lg border min-h-[60px]
+                  transition-all duration-150 ${styles}
+                  ${disabled && !isSoon ? 'opacity-60' : ''}`}
+    >
+      <span className="text-base leading-none" aria-hidden="true">{icon}</span>
+      <span className="text-[10px] font-semibold tracking-wide leading-tight">{label}</span>
+      <span className={`text-[8px] uppercase tracking-widest font-semibold ${pillColor}`}>
+        {pillText}
+      </span>
+    </button>
   );
 }
 

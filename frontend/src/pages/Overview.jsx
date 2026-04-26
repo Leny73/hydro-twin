@@ -24,6 +24,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Map, { Source, Layer, Marker, NavigationControl, ScaleControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -272,6 +273,13 @@ export default function Overview() {
     });
   }, [setPageMeta]);
 
+  // ── URL deep-linking ────────────────────────────────────────────────────
+  // ?region=<id> drives selection on initial load + browser back/forward,
+  // and clicks update the URL so users can share/email a deep link to the
+  // region panel they're looking at.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const regionParam = searchParams.get('region');
+
   // ── Selection / live-fetch state ─────────────────────────────────────────
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [assessment,     setAssessment]     = useState(null);
@@ -353,6 +361,9 @@ export default function Overview() {
     const statusByRegion = Object.fromEntries(
       regionStatuses.map(s => [s.region_id, s.status])
     );
+    if (selectedRegion && displayedAssessment?.replay && displayedAssessment?.status) {
+      statusByRegion[selectedRegion.id] = displayedAssessment.status;
+    }
     return {
       ...REGIONS_GEOJSON,
       features: REGIONS_GEOJSON.features.map(f => {
@@ -367,7 +378,7 @@ export default function Overview() {
         };
       }),
     };
-  }, [regionStatuses]);
+  }, [regionStatuses, selectedRegion, displayedAssessment]);
 
   // ── Painted municipalities ──────────────────────────────────────────────
   // Same shared snapshot as oblasts — cron writes both into HydroTwinStatus
@@ -377,6 +388,9 @@ export default function Overview() {
     const statusByGid = Object.fromEntries(
       regionStatuses.map(s => [s.region_id, s.status])
     );
+    if (selectedRegion && displayedAssessment?.replay && displayedAssessment?.status) {
+      statusByGid[selectedRegion.id] = displayedAssessment.status;
+    }
     return {
       ...MUNICIPALITIES_GEOJSON,
       features: MUNICIPALITIES_GEOJSON.features.map(f => {
@@ -385,7 +399,7 @@ export default function Overview() {
         return { ...f, properties: { ...f.properties, ...extra } };
       }),
     };
-  }, [regionStatuses]);
+  }, [regionStatuses, selectedRegion, displayedAssessment]);
 
   // ── Live /assess fetch ──────────────────────────────────────────────────
   const fetchAssessment = useCallback(async (region) => {
@@ -426,9 +440,36 @@ export default function Overview() {
     }
   }, [patchRegionStatus]);
 
+  // Resolve a region ID (either an oblast slug or a GADM municipality GID)
+  // into the {id, name, bbox, longitude, latitude, parentRegionId} shape the
+  // panel + click handlers expect. Returns null if the ID isn't recognised.
+  const findRegionById = useCallback((id) => {
+    if (!id) return null;
+    const oblast = REGIONS.find(r => r.id === id);
+    if (oblast) return oblast;
+    const muni = MUNICIPALITIES_GEOJSON.features.find(
+      f => f.properties.GID_2 === id
+    );
+    if (!muni) return null;
+    const bbox = bboxFromGeometry(muni.geometry);
+    return {
+      id:             muni.properties.GID_2,
+      name:           muni.properties.NAME_2,
+      description:    `${muni.properties.NAME_2} municipality — ${muni.properties.NAME_1} Region`,
+      bbox,
+      longitude:      (bbox[0] + bbox[2]) / 2,
+      latitude:       (bbox[1] + bbox[3]) / 2,
+      parentRegionId: REGION_NAME_TO_ID[muni.properties.NAME_1] ?? null,
+    };
+  }, []);
+
   // ── Cache-first oblast click ────────────────────────────────────────────
   const handleRegionClick = useCallback((region) => {
     setSelectedRegion(region);
+    // Mirror the selection into the URL so the panel state is shareable +
+    // survives browser back/forward. `replace: false` so back returns to the
+    // map view (no selection) before this page's previous route entry.
+    setSearchParams({ region: region.id }, { replace: false });
     setReplayDate(null);
     setReplayCuratedEvent(null);
     setError(null);
@@ -447,7 +488,7 @@ export default function Overview() {
       return;
     }
     fetchAssessment(region);
-  }, [regionStatuses, fetchAssessment]);
+  }, [regionStatuses, fetchAssessment, setSearchParams]);
 
   const closePanel = useCallback(() => {
     setSelectedRegion(null);
@@ -455,7 +496,26 @@ export default function Overview() {
     setError(null);
     setReplayDate(null);
     setReplayCuratedEvent(null);
-  }, []);
+    // Clear ?region from the URL but keep any other params the layout cares
+    // about. Today there are none on /, but writing it this way is forward-safe.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('region');
+      return next;
+    }, { replace: false });
+  }, [setSearchParams]);
+
+  // ── Open from URL on mount + on back/forward navigation ────────────────
+  // Runs whenever ?region= changes. We deliberately skip selectedRegion in
+  // the deps — clicking already syncs the URL, so re-running on selection
+  // change would just be a no-op or worse, a feedback loop.
+  useEffect(() => {
+    if (!regionParam) return;
+    if (selectedRegion?.id === regionParam) return;
+    const region = findRegionById(regionParam);
+    if (region) handleRegionClick(region);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-way URL→state sync
+  }, [regionParam]);
 
   // ── Replay handlers ─────────────────────────────────────────────────────
   const handleReplayDateChange = useCallback((iso) => {
@@ -702,10 +762,11 @@ export default function Overview() {
 
       {!selectedRegion && !isLoading && (
         <div
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20
+          className="absolute left-1/2 -translate-x-1/2 z-20
                      bg-gray-900/85 border border-gray-700 backdrop-blur-sm
                      text-gray-400 text-xs px-5 py-2.5 rounded-full
                      pointer-events-none select-none"
+          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
         >
           Tap a region to view assessment
         </div>

@@ -417,12 +417,9 @@ def lambda_handler(event: dict, context) -> dict:
     # ── 2. Run the core pipeline ──────────────────────────────────────────
     assessment = assess_region(region_id, bbox)
 
-    # ── 3. Trigger webhook for non-SAFE statuses (click-path: always fire) ──
-    if assessment.get("status", "SAFE") != "SAFE":
-        logger.info("Non-SAFE status detected (%s) — firing webhook.", assessment["status"])
-        trigger_webhook(assessment)
-
-    # ── 4. Return API Gateway response ────────────────────────────────────
+    # ── 3. Return API Gateway response ────────────────────────────────────
+    # Webhooks (Discord/Telegram) fire from cron_handler only, on status
+    # transitions. Firing here on every map click caused notification spam.
     logger.info("Assessment complete: %s (confidence: %s)",
                 assessment.get("status"), assessment.get("confidence"))
     return _response(200, assessment)

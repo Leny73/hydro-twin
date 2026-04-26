@@ -1,4 +1,5 @@
-import SeverityCounter from './SeverityCounter';
+import SeverityCounter from "./SeverityCounter";
+import logoUrl from "../../logo.jpg";
 
 /**
  * TopBar.jsx — page title + severity counter + mobile hamburger
@@ -13,7 +14,12 @@ import SeverityCounter from './SeverityCounter';
  * the MobileNav drawer owned by Layout.
  */
 
-export default function TopBar({ title, subtitle, regionStatuses, onMenuClick }) {
+export default function TopBar({
+  title,
+  subtitle,
+  regionStatuses,
+  onMenuClick,
+}) {
   return (
     <header
       className="flex items-center gap-3 sm:gap-6 pl-2 pr-4 sm:px-6 h-16 flex-shrink-0
@@ -29,7 +35,9 @@ export default function TopBar({ title, subtitle, regionStatuses, onMenuClick })
                      rounded-md text-gray-200 hover:text-white hover:bg-gray-800
                      active:scale-95 cursor-pointer transition-colors"
         >
-          <span className="text-2xl leading-none" aria-hidden="true">☰</span>
+          <span className="text-2xl leading-none" aria-hidden="true">
+            ☰
+          </span>
         </button>
       )}
 
@@ -37,7 +45,13 @@ export default function TopBar({ title, subtitle, regionStatuses, onMenuClick })
         {/* Mobile: brand wordmark (sidebar isn't visible to carry it).
             Desktop: page title + subtitle (sidebar already shows the brand). */}
         <div className="sm:hidden flex items-center gap-1.5">
-          <span className="text-lg leading-none select-none" aria-hidden="true">💧</span>
+          <img
+            src={logoUrl}
+            alt=""
+            aria-hidden="true"
+            className="w-7 h-7 object-contain select-none flex-shrink-0"
+            draggable="false"
+          />
           <span className="text-sm font-bold tracking-widest text-cyan-400 uppercase leading-none">
             HydroTwin
           </span>

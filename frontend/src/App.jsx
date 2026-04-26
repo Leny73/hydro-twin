@@ -32,6 +32,7 @@ import Sources   from './pages/Sources';
 import Dams      from './pages/Dams';
 import Submit    from './pages/Submit';
 import NotFound  from './pages/NotFound';
+import Unsubscribe from './pages/Unsubscribe';
 
 export default function App() {
   return (
@@ -43,8 +44,9 @@ export default function App() {
           <Route path="/sources"   element={<Sources />}   />
           <Route path="/dams"      element={<Dams />}      />
         </Route>
-        <Route path="/submit" element={<Submit />} />
-        <Route path="*"       element={<NotFound />} />
+        <Route path="/submit"      element={<Submit />}      />
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
+        <Route path="*"            element={<NotFound />}    />
       </Routes>
     </BrowserRouter>
   );
