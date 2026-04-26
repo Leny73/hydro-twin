@@ -90,7 +90,7 @@ export default function AlertPanel({
   onCuratedEventSelect = () => {},
 }) {
   const [formOpen,    setFormOpen]    = useState(false);
-  const [email,       setEmail]       = useState('');
+  const [phone,       setPhone]       = useState('');
   const [submitting,  setSubmitting]  = useState(false);
   const [toast,       setToast]       = useState(null);
   const [replayOpen,  setReplayOpen]  = useState(false);
@@ -99,7 +99,7 @@ export default function AlertPanel({
   // Reset transient state when region changes
   useEffect(() => {
     setFormOpen(false);
-    setEmail('');
+    setPhone('');
     setSubmitting(false);
     setToast(null);
     setReplayOpen(false);
@@ -131,15 +131,16 @@ export default function AlertPanel({
 
   const closeForm = () => {
     setFormOpen(false);
-    setEmail('');
+    setPhone('');
     setToast(null);
   };
 
   const submitSubscribe = async (e) => {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!/^\S+@\S+\.\S+$/.test(trimmed)) {
-      setToast({ kind: 'error', msg: 'Please enter a valid email address.' });
+    const trimmed = phone.trim();
+    // E.164: +[country code][number], 8–15 digits total
+    if (!/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+      setToast({ kind: 'error', msg: 'Enter a valid international phone number (e.g. +359876543210).' });
       return;
     }
     setToast(null);
@@ -150,15 +151,17 @@ export default function AlertPanel({
       const res  = await fetch(url, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email: trimmed, region_id: region?.id }),
+        body:    JSON.stringify({ phone: trimmed, region_id: region?.id }),
       });
       if (res.status === 400) {
-        setToast({ kind: 'error', msg: 'That email was rejected — please double-check it.' });
+        setToast({ kind: 'error', msg: 'That number was rejected — use international format: +359…' });
+      } else if (res.status === 409) {
+        setToast({ kind: 'error', msg: `Already subscribed for ${region?.name}.` });
       } else if (!res.ok) {
         setToast({ kind: 'error', msg: `Subscription failed (${res.status}). Please try again.` });
       } else {
-        setToast({ kind: 'success', msg: `✅ You're subscribed for ${region?.name}` });
-        setEmail('');
+        setToast({ kind: 'success', msg: `✅ Subscribed! You'll get SMS alerts for ${region?.name}.` });
+        setPhone('');
         setFormOpen(false);
         setTimeout(() => {
           setToast((t) => (t && t.kind === 'success' ? null : t));
@@ -339,9 +342,9 @@ export default function AlertPanel({
                   ? 'bg-red-600 hover:bg-red-500 text-white'
                   : 'bg-cyan-800 hover:bg-cyan-700 text-white'}
               `}
-              aria-label={`Subscribe to push alerts for ${region?.name}`}
+              aria-label={`Subscribe to SMS alerts for ${region?.name}`}
             >
-              {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to Push Alerts'}
+              {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to SMS Alerts'}
             </button>
           ) : (
             <form
@@ -349,19 +352,19 @@ export default function AlertPanel({
               className="flex flex-col gap-2"
               aria-label={`Subscribe form for ${region?.name}`}
             >
-              <label htmlFor="subscribe-email" className="text-[10px] uppercase tracking-widest text-gray-400">
-                Email Address
+              <label htmlFor="subscribe-phone" className="text-[10px] uppercase tracking-widest text-gray-400">
+                Phone Number
               </label>
               <input
-                id="subscribe-email"
-                type="email"
-                autoComplete="email"
+                id="subscribe-phone"
+                type="tel"
+                autoComplete="tel"
                 autoFocus
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
                 disabled={submitting}
-                placeholder="you@example.com"
+                placeholder="+359876543210"
                 aria-invalid={toast?.kind === 'error' ? 'true' : 'false'}
                 className="w-full min-h-[44px] px-3 py-2 bg-gray-800 border border-gray-700
                            rounded-lg text-sm text-white placeholder-gray-500

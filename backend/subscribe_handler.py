@@ -2,17 +2,18 @@
 subscribe_handler.py — HydroTwin /subscribe Lambda
 ====================================================
 
-Stores a (email, region_id) subscription in DynamoDB so the Subscribe-to-Alerts
-button in the frontend has a real backend.
+Stores a (phone, region_id) subscription in DynamoDB and sends a confirmation
+SMS via AWS SNS so subscribers receive push notifications on status transitions.
 
 Flow:
-  1.  Parse incoming API Gateway POST  (email + region_id)
-  2.  Validate email format + region_id against the known region whitelist
+  1.  Parse incoming API Gateway POST  (phone + region_id)
+  2.  Validate E.164 phone format + region_id against the known region whitelist
   3.  PutItem to DynamoDB with a conditional expression (no overwrite)
-        └─ Composite key:  PK = email, SK = region_id
-        └─ One user can subscribe to multiple regions; same (email, region) pair
+        └─ Composite key:  PK = phone, SK = region_id
+        └─ One user can subscribe to multiple regions; same (phone, region) pair
            only exists once.
-  4.  Return API Gateway-compatible JSON response with CORS headers
+  4.  Send a confirmation SMS via AWS SNS with region info
+  5.  Return API Gateway-compatible JSON response with CORS headers
         201 = subscribed, 400 = invalid input, 409 = already subscribed
 
 Environment Variables (set in AWS Lambda Console):
@@ -22,15 +23,16 @@ Environment Variables (set in AWS Lambda Console):
 Deploy:
   Runtime  : Python 3.10+
   Handler  : subscribe_handler.lambda_handler
-  Memory   : 128 MB    (DynamoDB PutItem is tiny)
+  Memory   : 128 MB
   Timeout  : 10s
   Include  : subscribe_handler.py + boto3 (pre-installed in Lambda runtime)
   IAM      : dynamodb:PutItem on arn:aws:dynamodb:<region>:<acct>:table/HydroTwinSubscriptions
+             sns:Publish (for direct SMS — no topic needed)
 
 Demo-first philosophy (matches lambda_handler.py):
   If SUBSCRIPTIONS_TABLE is unset OR the DynamoDB call fails for any reason,
   return 201 with `demo_mode: true` so the Subscribe UI still shows success
-  during the pitch. The warning is logged to CloudWatch, not bubbled up.
+  during the pitch. SNS failures are also non-fatal — logged and ignored.
 """
 
 import json
@@ -55,12 +57,12 @@ AWS_REGION          = os.environ.get("AWS_REGION", "us-east-1")
 # Region whitelist sourced from backend/regions.py — single source of truth.
 # Sync with frontend/src/regions.geojson + frontend/src/App.jsx REGIONS[].id when adding regions.
 
-# Loose RFC-ish email regex — strict validation belongs to a verification email,
-# not a synchronous API call.
-EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# E.164 international phone number format: +[country code][number], 8–15 digits total.
+PHONE_REGEX = re.compile(r"^\+[1-9]\d{7,14}$")
 
-# Lazy DynamoDB client — instantiated on first invocation, reused warm.
-_TABLE = None
+# Lazy clients — instantiated on first invocation, reused across warm invocations.
+_TABLE   = None
+_SNS     = None
 
 
 def _get_table():
@@ -68,6 +70,44 @@ def _get_table():
     if _TABLE is None:
         _TABLE = boto3.resource("dynamodb", region_name=AWS_REGION).Table(SUBSCRIPTIONS_TABLE)
     return _TABLE
+
+
+def _get_sns():
+    global _SNS
+    if _SNS is None:
+        _SNS = boto3.client("sns", region_name=AWS_REGION)
+    return _SNS
+
+
+def _send_confirmation_sms(phone: str, region_id: str) -> None:
+    """Fire a confirmation SMS via AWS SNS direct publish. Non-fatal on any error."""
+    region_label = region_id.replace("-", " ").title()
+    message = (
+        f"HydroTwin: You are now subscribed to flood & drought alerts for "
+        f"{region_label}. You will receive an SMS whenever the risk level changes. "
+        f"Reply STOP to unsubscribe."
+    )
+    logger.info("SMS payload → %s: %s", phone, message)
+    print(f"\n[HydroTwin SMS] To: {phone}\n[HydroTwin SMS] {message}\n", flush=True)
+    try:
+        _get_sns().publish(
+            PhoneNumber=phone,
+            Message=message,
+            MessageAttributes={
+                "AWS.SNS.SMS.SMSType": {
+                    "DataType":    "String",
+                    "StringValue": "Transactional",
+                },
+                "AWS.SNS.SMS.SenderID": {
+                    "DataType":    "String",
+                    "StringValue": "HydroTwin",
+                },
+            },
+        )
+        logger.info("Confirmation SMS sent to %s for %s", phone, region_id)
+    except Exception as exc:
+        # SNS failure must not block the subscribe response.
+        logger.warning("SMS send failed (no AWS creds?) — message was logged above. Error: %s", exc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,13 +120,13 @@ def lambda_handler(event: dict, context) -> dict:
 
     Expected POST body (JSON):
     {
-        "email":     "user@example.com",
+        "phone":     "+359876543210",
         "region_id": "danube-basin"
     }
 
     Responses:
-      201  { "message": "subscribed", "email": ..., "region_id": ..., "created_at": ... }
-      400  { "error": "Invalid email" | "Unknown region_id" | "Invalid JSON body" }
+      201  { "message": "subscribed", "phone": ..., "region_id": ..., "created_at": ... }
+      400  { "error": "Invalid phone number" | "Unknown region_id" | "Invalid JSON body" }
       409  { "error": "Already subscribed", ... }
     """
     logger.info("Event received: %s", json.dumps(event))
@@ -103,11 +143,11 @@ def lambda_handler(event: dict, context) -> dict:
         logger.error("Invalid request body: %s", exc)
         return _response(400, {"error": f"Invalid JSON body: {exc}"})
 
-    email     = (body.get("email")     or "").strip().lower()
+    phone     = (body.get("phone")     or "").strip()
     region_id = (body.get("region_id") or "").strip()
 
-    if not EMAIL_REGEX.match(email):
-        return _response(400, {"error": "Invalid email address"})
+    if not PHONE_REGEX.match(phone):
+        return _response(400, {"error": "Invalid phone number — use international format: +359876543210"})
 
     if region_id not in KNOWN_REGIONS:
         return _response(400, {
@@ -117,7 +157,7 @@ def lambda_handler(event: dict, context) -> dict:
 
     created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     item = {
-        "email":      email,
+        "phone":      phone,
         "region_id":  region_id,
         "created_at": created_at,
     }
@@ -126,18 +166,19 @@ def lambda_handler(event: dict, context) -> dict:
     try:
         _get_table().put_item(
             Item=item,
-            ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(region_id)",
+            ConditionExpression="attribute_not_exists(phone) AND attribute_not_exists(region_id)",
         )
-        logger.info("Subscribed: %s → %s", email, region_id)
+        logger.info("Subscribed: %s → %s", phone, region_id)
+        _send_confirmation_sms(phone, region_id)
         return _response(201, {"message": "subscribed", **item})
 
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
         if code == "ConditionalCheckFailedException":
-            logger.info("Duplicate subscription: %s → %s", email, region_id)
+            logger.info("Duplicate subscription: %s → %s", phone, region_id)
             return _response(409, {
                 "error":     "Already subscribed",
-                "email":     email,
+                "phone":     phone,
                 "region_id": region_id,
             })
         # Real AWS error (table missing, throttling, IAM denied, etc.) — fall
