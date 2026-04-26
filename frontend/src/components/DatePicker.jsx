@@ -1,3 +1,5 @@
+import { CalendarDays } from 'lucide-react';
+
 /**
  * DatePicker.jsx — Replay-date selector
  * ======================================
@@ -31,7 +33,10 @@ export default function DatePicker({
         htmlFor="replay-date"
         className="block text-[10px] uppercase tracking-widest text-gray-400 mb-1.5"
       >
-        📅 Replay any past day
+        <span className="flex items-center gap-1.5">
+          <CalendarDays className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
+          Replay any past day
+        </span>
       </label>
       <div className="flex gap-2">
         <input

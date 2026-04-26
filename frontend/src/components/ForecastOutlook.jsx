@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CloudLightning, CloudRain, CloudDrizzle, Sun, AlertCircle } from 'lucide-react';
 import { fetchForecastOutlook } from '../lib/openmeteo';
 
 /**
@@ -22,10 +23,10 @@ function bboxCenter(bbox) {
 // Glyph derived from precip intensity. Keep deliberately coarse — we don't
 // have weather_code parsed and intensity is the actionable signal anyway.
 function glyphFor(precip_mm) {
-  if (precip_mm >= 15) return { icon: '⛈️', tone: 'text-red-300'    };
-  if (precip_mm >= 5)  return { icon: '☔',  tone: 'text-blue-300'   };
-  if (precip_mm >= 1)  return { icon: '🌦️', tone: 'text-cyan-300'   };
-  return                       { icon: '☀️', tone: 'text-yellow-200' };
+  if (precip_mm >= 15) return { Icon: CloudLightning, tone: 'text-red-300'    };
+  if (precip_mm >= 5)  return { Icon: CloudRain,      tone: 'text-blue-300'   };
+  if (precip_mm >= 1)  return { Icon: CloudDrizzle,   tone: 'text-cyan-300'   };
+  return                       { Icon: Sun,            tone: 'text-yellow-200' };
 }
 
 function dayLabel(iso, idx) {
@@ -102,9 +103,7 @@ export default function ForecastOutlook({ region }) {
                   <span className="text-[9px] uppercase tracking-wider text-gray-400">
                     {dayLabel(d.date, i)}
                   </span>
-                  <span className={`text-base leading-none ${g.tone}`} aria-hidden="true">
-                    {g.icon}
-                  </span>
+                  <g.Icon className={`w-4 h-4 ${g.tone}`} aria-hidden="true" />
                   <span className="text-[10px] tabular-nums font-bold text-gray-100">
                     {d.precip_mm < 1 ? '0' : d.precip_mm.toFixed(0)}
                     <span className="text-gray-500 font-normal">mm</span>
@@ -135,8 +134,9 @@ function Skeleton() {
 function ErrorRow({ msg }) {
   return (
     <div className="h-20 flex items-center justify-center px-3">
-      <span className="text-[10px] text-yellow-500 leading-relaxed text-center">
-        ⚠️ {msg}
+      <span className="flex items-center gap-1.5 text-[10px] text-yellow-500 leading-relaxed text-center">
+        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+        {msg}
       </span>
     </div>
   );

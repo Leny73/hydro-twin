@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Satellite, Radio, CloudRain } from 'lucide-react';
 
 /**
  * DataSourcesBar.jsx — bottom "Powered by trusted data" strip (desktop only)
@@ -13,9 +14,9 @@ import { Link } from 'react-router-dom';
  */
 
 const SOURCES = [
-  { icon: '🛰️', name: 'Copernicus',        sub: 'Sentinel-1 / -2 / -3 · SAR & optical' },
-  { icon: '📡',  name: 'Galileo',           sub: 'GNSS positioning & timing'           },
-  { icon: '🌧️', name: 'Rainfall datasets', sub: 'OpenMeteo + ERA5 · precipitation'    },
+  { Icon: Satellite,  iconColor: 'text-cyan-400',  name: 'Copernicus',        sub: 'Sentinel-1 / -2 / -3 · SAR & optical' },
+  { Icon: Radio,      iconColor: 'text-indigo-400', name: 'Galileo',           sub: 'GNSS positioning & timing'           },
+  { Icon: CloudRain,  iconColor: 'text-sky-400',    name: 'Rainfall datasets', sub: 'OpenMeteo + ERA5 · precipitation'    },
 ];
 
 export default function DataSourcesBar({ dataQuality = 'Good' }) {
@@ -33,7 +34,7 @@ export default function DataSourcesBar({ dataQuality = 'Good' }) {
 
       {SOURCES.map(s => (
         <div key={s.name} className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-base" aria-hidden="true">{s.icon}</span>
+          <s.Icon className={`w-4 h-4 flex-shrink-0 ${s.iconColor}`} aria-hidden="true" />
           <div className="leading-tight">
             <p className="font-semibold text-gray-300">{s.name}</p>
             <p className="text-[10px] text-gray-500">{s.sub}</p>

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Bot, X, Send } from 'lucide-react';
 
 /**
  * AlertChat.jsx — HydroAgent Context-Aware Alert Assistant
@@ -106,7 +107,7 @@ export default function AlertChat({ region, assessment, onClose }) {
             <div className="w-10 h-1 bg-gray-600 rounded-full" />
           </div>
         )}
-        <span className="text-base" aria-hidden="true">💬</span>
+        <Bot className="w-4 h-4 text-cyan-400 flex-shrink-0" aria-hidden="true" />
         <div className="flex-1 min-w-0">
           <p className="text-[10px] uppercase tracking-widest text-cyan-400 font-semibold">
             Ask HydroAgent
@@ -124,7 +125,7 @@ export default function AlertChat({ region, assessment, onClose }) {
                        cursor-pointer flex-shrink-0"
             aria-label="Close chat"
           >
-            ✕
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -195,11 +196,11 @@ export default function AlertChat({ region, assessment, onClose }) {
           aria-label="Send message"
           className="min-h-[40px] min-w-[40px] flex items-center justify-center
                      rounded-lg bg-cyan-700 hover:bg-cyan-600 active:scale-95
-                     text-white text-sm font-bold
+                     text-white
                      transition-all duration-150 cursor-pointer
                      disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ↑
+          <Send className="w-4 h-4" aria-hidden="true" />
         </button>
       </form>
     </div>

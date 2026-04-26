@@ -1,4 +1,12 @@
 import { useEffect, useState } from 'react';
+import {
+  CheckCircle2, Sun, Flame, Waves, AlertTriangle, AlertCircle,
+  TrendingUp, Droplets, Sprout, ClipboardList,
+  Mail, MessageSquare, Smartphone, Send,
+  Satellite, Radio, CloudRain,
+  BellRing, Bot, X, ChevronDown, ChevronUp,
+  BookOpen, RotateCcw, Info,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import PrecipitationChart from './PrecipitationChart';
 import ForecastOutlook    from './ForecastOutlook';
@@ -50,19 +58,19 @@ const MD_COMPONENTS = {
 
 // ── Status metadata: maps each alert code to display properties ──────────────
 const STATUS_META = {
-  SAFE:            { bg: 'bg-emerald-950/60', border: 'border-emerald-500', dot: 'bg-emerald-400', icon: '✅', label: 'Safe',            tag: 'NORMAL'   },
-  DROUGHT_WATCH:   { bg: 'bg-yellow-950/60',  border: 'border-yellow-500',  dot: 'bg-yellow-400',  icon: '🟡', label: 'Drought Watch',   tag: 'WATCH'    },
-  DROUGHT_WARNING: { bg: 'bg-orange-950/60',  border: 'border-orange-500',  dot: 'bg-orange-500',  icon: '🔴', label: 'Drought Warning', tag: 'WARNING'  },
-  FLOOD_WATCH:     { bg: 'bg-blue-950/60',    border: 'border-blue-400',    dot: 'bg-blue-400',    icon: '🌊', label: 'Flood Watch',     tag: 'WATCH'    },
-  FLOOD_WARNING:   { bg: 'bg-red-950/60',     border: 'border-red-500',     dot: 'bg-red-500',     icon: '🔴', label: 'Flood Warning',   tag: 'CRITICAL' },
+  SAFE:            { bg: 'bg-emerald-950/60', border: 'border-emerald-500', dot: 'bg-emerald-400', Icon: CheckCircle2,   iconColor: 'text-emerald-400', label: 'Safe',            tag: 'NORMAL'   },
+  DROUGHT_WATCH:   { bg: 'bg-yellow-950/60',  border: 'border-yellow-500',  dot: 'bg-yellow-400',  Icon: Sun,            iconColor: 'text-yellow-400',  label: 'Drought Watch',   tag: 'WATCH'    },
+  DROUGHT_WARNING: { bg: 'bg-orange-950/60',  border: 'border-orange-500',  dot: 'bg-orange-500',  Icon: Flame,          iconColor: 'text-orange-400',  label: 'Drought Warning', tag: 'WARNING'  },
+  FLOOD_WATCH:     { bg: 'bg-blue-950/60',    border: 'border-blue-400',    dot: 'bg-blue-400',    Icon: Waves,          iconColor: 'text-blue-400',    label: 'Flood Watch',     tag: 'WATCH'    },
+  FLOOD_WARNING:   { bg: 'bg-red-950/60',     border: 'border-red-500',     dot: 'bg-red-500',     Icon: AlertTriangle,  iconColor: 'text-red-400',     label: 'Flood Warning',   tag: 'CRITICAL' },
 };
 const DEFAULT_META = STATUS_META.SAFE;
 
 const SECTIONS = [
-  { key: 'whats_happening', icon: '📈', label: 'What is happening' },
-  { key: 'why_it_matters',  icon: '💧', label: 'Why it matters'    },
-  { key: 'current_context', icon: '🌱', label: 'Current context'   },
-  { key: 'next_step',       icon: '📋', label: 'Suggested next step' },
+  { key: 'whats_happening', Icon: TrendingUp,   iconColor: 'text-blue-400',   label: 'What is happening'    },
+  { key: 'why_it_matters',  Icon: Droplets,     iconColor: 'text-cyan-400',   label: 'Why it matters'       },
+  { key: 'current_context', Icon: Sprout,       iconColor: 'text-green-400',  label: 'Current context'      },
+  { key: 'next_step',       Icon: ClipboardList, iconColor: 'text-amber-400', label: 'Suggested next step'  },
 ];
 
 function tagColor(tag) {
@@ -83,10 +91,10 @@ function tagColor(tag) {
 //   sms          → blocked on AWS SNS sandbox approval (notifications.send_sms is a stub)
 //   telegram     → blocked on per-user bot UX (notifications.send_telegram_to_user is a stub)
 const CHANNELS = [
-  { id: 'email',    icon: '📧', label: 'Email',    enabled: true,  required: true  },
-  { id: 'discord',  icon: '💬', label: 'Discord',  enabled: true,  required: false },
-  { id: 'sms',      icon: '📱', label: 'SMS',      enabled: false, required: false },
-  { id: 'telegram', icon: '✈️', label: 'Telegram', enabled: false, required: false },
+  { id: 'email',    Icon: Mail,         label: 'Email',    enabled: true,  required: true  },
+  { id: 'discord',  Icon: MessageSquare, label: 'Discord', enabled: true,  required: false },
+  { id: 'sms',      Icon: Smartphone,   label: 'SMS',      enabled: false, required: false },
+  { id: 'telegram', Icon: Send,         label: 'Telegram', enabled: false, required: false },
 ];
 
 // Discord webhook URL shape — kept loose, the backend re-validates strictly.
@@ -321,7 +329,7 @@ export default function AlertPanel({
                 aria-label="Open AI chat assistant"
                 title="Ask HydroAgent"
               >
-                💬
+                <Bot className="w-4 h-4" aria-hidden="true" />
               </button>
             )}
             <button
@@ -332,7 +340,7 @@ export default function AlertPanel({
                          cursor-pointer"
               aria-label="Close panel and return to map"
             >
-              ✕
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -351,7 +359,9 @@ export default function AlertPanel({
           role="status"
           aria-live="polite"
         >
-          <span aria-hidden="true">{isCurated ? '📚' : '📡'}</span>
+          {isCurated
+            ? <BookOpen className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            : <Radio    className="w-4 h-4 flex-shrink-0" aria-hidden="true" />}
           <span className="flex-1">
             <strong className="text-white">
               {isCurated ? 'Curated reference' : 'Live archive'}
@@ -396,9 +406,7 @@ export default function AlertPanel({
               <span className="text-sm font-bold tracking-wide">
                 {meta.label}
               </span>
-              <span className="ml-auto text-base" role="img" aria-label={meta.label}>
-                {meta.icon}
-              </span>
+              <meta.Icon className={`ml-auto w-4 h-4 ${meta.iconColor}`} aria-hidden="true" />
             </div>
           </div>
 
@@ -418,7 +426,10 @@ export default function AlertPanel({
               `}
               aria-label={`Subscribe to push alerts for ${region?.name}`}
             >
-              {isAlert ? '🔔 Subscribe to Alerts — URGENT' : '🔔 Subscribe to Push Alerts'}
+              <span className="flex items-center justify-center gap-2">
+                <BellRing className="w-4 h-4" aria-hidden="true" />
+                {isAlert ? 'Subscribe to Alerts — URGENT' : 'Subscribe to Push Alerts'}
+              </span>
             </button>
           ) : (
             <form
@@ -433,12 +444,12 @@ export default function AlertPanel({
                 </p>
                 <div className="grid grid-cols-4 gap-1.5">
                   <ChannelButton
-                    icon="📧" label="Email"
+                    Icon={Mail} label="Email"
                     state="required"
                     disabled={submitting}
                   />
                   <ChannelButton
-                    icon="💬" label="Discord"
+                    Icon={MessageSquare} label="Discord"
                     state={discordEnabled ? 'on' : 'off'}
                     disabled={submitting}
                     onClick={() => {
@@ -447,12 +458,12 @@ export default function AlertPanel({
                     }}
                   />
                   <ChannelButton
-                    icon="📱" label="SMS"
+                    Icon={Smartphone} label="SMS"
                     state="soon"
                     title="Awaiting AWS SNS approval — coming soon"
                   />
                   <ChannelButton
-                    icon="✈️" label="Telegram"
+                    Icon={Send} label="Telegram"
                     state="soon"
                     title="Per-user Telegram bot — coming soon"
                   />
@@ -462,7 +473,7 @@ export default function AlertPanel({
               {/* Email input — always visible (required) */}
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="subscribe-email" className="text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
-                  <span aria-hidden="true">📧</span> Email Address
+                  <Mail className="w-3.5 h-3.5 text-cyan-500" aria-hidden="true" /> Email Address
                 </label>
                 <input
                   id="subscribe-email"
@@ -486,7 +497,7 @@ export default function AlertPanel({
               {discordEnabled && (
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="subscribe-discord" className="text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-1.5">
-                    <span aria-hidden="true">💬</span> Discord Webhook URL
+                    <MessageSquare className="w-3.5 h-3.5 text-indigo-400" aria-hidden="true" /> Discord Webhook URL
                   </label>
                   <input
                     id="subscribe-discord"
@@ -509,7 +520,9 @@ export default function AlertPanel({
                                cursor-pointer flex items-center gap-1"
                     aria-expanded={discordHelpOpen}
                   >
-                    <span>{discordHelpOpen ? '−' : 'ⓘ'}</span>
+                    {discordHelpOpen
+                      ? <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                      : <Info      className="w-3.5 h-3.5" aria-hidden="true" />}
                     <span>How do I get a Discord webhook?</span>
                   </button>
                   {discordHelpOpen && (
@@ -576,7 +589,8 @@ export default function AlertPanel({
               {visibleSections.map(s => (
                 <Section
                   key={s.key}
-                  icon={s.icon}
+                  Icon={s.Icon}
+                  iconColor={s.iconColor}
                   label={s.label}
                   content={structured[s.key]}
                   accentColor={s.key === 'next_step' ? alertColor : undefined}
@@ -618,7 +632,8 @@ export default function AlertPanel({
 
           {/* 9. Replay & past events — collapsible */}
           <CollapsibleSection
-            title="🕓 Replay & past events"
+            title="Replay & past events"
+            TitleIcon={RotateCcw}
             isOpen={replayOpen}
             onToggle={() => setReplayOpen(o => !o)}
           >
@@ -684,13 +699,14 @@ export default function AlertPanel({
       )}
 
       {error && (
-        <p
-          className="text-[10px] text-yellow-400 border border-yellow-800/60
-                     bg-yellow-950/40 px-3 py-2 rounded-md text-center leading-relaxed"
+        <div
+          className="flex items-center justify-center gap-1.5 text-[10px] text-yellow-400 border border-yellow-800/60
+                     bg-yellow-950/40 px-3 py-2 rounded-md leading-relaxed"
           role="alert"
         >
-          ⚠️ {error}
-        </p>
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+          {error}
+        </div>
       )}
       </div>
     </aside>
@@ -727,7 +743,7 @@ export default function AlertPanel({
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function Section({ icon, label, content, accentColor }) {
+function Section({ Icon, iconColor, label, content, accentColor }) {
   // `accentColor` turns the section LABEL into a tinted pill — same hue as
   // the panel frame, so the call-out reads as part of the alert visual.
   const labelStyle = accentColor
@@ -742,10 +758,10 @@ function Section({ icon, label, content, accentColor }) {
     <div className="flex gap-3">
       <div
         className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-800/80 border border-gray-700
-                   flex items-center justify-center text-base"
+                   flex items-center justify-center"
         aria-hidden="true"
       >
-        {icon}
+        <Icon className={`w-4 h-4 ${iconColor}`} />
       </div>
       <div className="min-w-0 flex-1">
         <p
@@ -777,9 +793,9 @@ function Section({ icon, label, content, accentColor }) {
 // a small monospace caption underneath for transparency.
 
 const ASSESSMENT_SOURCES = [
-  { icon: '🛰️', name: 'Sentinel-2',  sub: 'NDVI · NDWI · vegetation' },
-  { icon: '📡',  name: 'Sentinel-1',  sub: 'SAR soil moisture'        },
-  { icon: '🌧️', name: 'OpenMeteo',   sub: 'Precipitation · ERA5'     },
+  { Icon: Satellite,  iconColor: 'text-green-400', name: 'Sentinel-2', sub: 'NDVI · NDWI · vegetation' },
+  { Icon: Radio,      iconColor: 'text-cyan-400',  name: 'Sentinel-1', sub: 'SAR soil moisture'        },
+  { Icon: CloudRain,  iconColor: 'text-sky-400',   name: 'OpenMeteo',  sub: 'Precipitation · ERA5'     },
 ];
 
 function AssessmentSources({ sources, isReplay }) {
@@ -803,7 +819,7 @@ function AssessmentSources({ sources, isReplay }) {
             className="flex flex-col items-center text-center gap-0.5
                        px-1.5 py-1.5 rounded-md bg-gray-800/50 border border-gray-700/50"
           >
-            <span className="text-base leading-none" aria-hidden="true">{s.icon}</span>
+            <s.Icon className={`w-4 h-4 ${s.iconColor}`} aria-hidden="true" />
             <span className="text-[10px] font-semibold text-gray-200 leading-tight">
               {s.name}
             </span>
@@ -829,7 +845,7 @@ function AssessmentSources({ sources, isReplay }) {
 // Square card showing icon + label + a small status pill ("Default" / "On" /
 // "Off" / "Soon"). Required + Soon are non-clickable; the latter is greyed out
 // because the backend channel hasn't been provisioned yet.
-function ChannelButton({ icon, label, state, onClick, disabled, title }) {
+function ChannelButton({ Icon, label, state, onClick, disabled, title }) {
   const isRequired = state === 'required';
   const isSoon     = state === 'soon';
   const isOn       = state === 'on';
@@ -865,7 +881,7 @@ function ChannelButton({ icon, label, state, onClick, disabled, title }) {
                   transition-all duration-150 ${styles}
                   ${disabled && !isSoon ? 'opacity-60' : ''}`}
     >
-      <span className="text-base leading-none" aria-hidden="true">{icon}</span>
+      <Icon className="w-4 h-4" aria-hidden="true" />
       <span className="text-[10px] font-semibold tracking-wide leading-tight">{label}</span>
       <span className={`text-[8px] uppercase tracking-widest font-semibold ${pillColor}`}>
         {pillText}
@@ -874,7 +890,7 @@ function ChannelButton({ icon, label, state, onClick, disabled, title }) {
   );
 }
 
-function CollapsibleSection({ title, isOpen, onToggle, children }) {
+function CollapsibleSection({ title, TitleIcon, isOpen, onToggle, children }) {
   return (
     <div className="border-t border-gray-700/60 pt-3">
       <button
@@ -885,10 +901,13 @@ function CollapsibleSection({ title, isOpen, onToggle, children }) {
                    hover:text-gray-200 transition-colors mb-2 cursor-pointer"
         aria-expanded={isOpen}
       >
-        <span>{title}</span>
-        <span className="text-gray-500 text-base leading-none" aria-hidden="true">
-          {isOpen ? '−' : '+'}
+        <span className="flex items-center gap-1.5">
+          {TitleIcon && <TitleIcon className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />}
+          {title}
         </span>
+        {isOpen
+          ? <ChevronUp   className="w-3.5 h-3.5 text-gray-500" aria-hidden="true" />
+          : <ChevronDown className="w-3.5 h-3.5 text-gray-500" aria-hidden="true" />}
       </button>
       {isOpen && (
         <div className="flex flex-col gap-3">

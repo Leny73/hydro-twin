@@ -1,3 +1,4 @@
+import { Menu } from 'lucide-react';
 import SeverityCounter from "./SeverityCounter";
 import logoUrl from "../../logo.jpg";
 
@@ -35,9 +36,7 @@ export default function TopBar({
                      rounded-md text-gray-200 hover:text-white hover:bg-gray-800
                      active:scale-95 cursor-pointer transition-colors"
         >
-          <span className="text-2xl leading-none" aria-hidden="true">
-            ☰
-          </span>
+          <Menu className="w-5 h-5" aria-hidden="true" />
         </button>
       )}
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MapPin } from 'lucide-react';
 import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { submitIncident } from '../lib/incidents-api';
@@ -205,7 +206,7 @@ export default function IncidentForm({ onSubmitted } = {}) {
               <NavigationControl position="top-right" showCompass={false} />
               {pin && (
                 <Marker longitude={pin.lng} latitude={pin.lat} anchor="bottom">
-                  <span className="text-2xl drop-shadow-lg" aria-hidden="true">📍</span>
+                  <MapPin className="w-7 h-7 text-red-400 drop-shadow-lg" aria-hidden="true" />
                 </Marker>
               )}
             </Map>

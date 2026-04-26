@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Layers, ChevronUp, AlertTriangle } from 'lucide-react';
 
 /**
  * MapLegend.jsx — Status colour legend + freshness indicator
@@ -73,7 +74,7 @@ export default function MapLegend({ lastUpdated, demoMode }) {
                    rounded-lg cursor-pointer
                    hover:border-gray-500 transition-colors"
       >
-        <span className="text-base" aria-hidden="true">🗂️</span>
+        <Layers className="w-5 h-5 text-gray-300" aria-hidden="true" />
       </button>
     );
   }
@@ -99,7 +100,7 @@ export default function MapLegend({ lastUpdated, demoMode }) {
                      text-gray-500 hover:text-gray-200 cursor-pointer
                      transition-colors"
         >
-          <span className="text-sm leading-none" aria-hidden="true">−</span>
+          <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>
       <ul className="space-y-1 mb-2">
@@ -121,8 +122,9 @@ export default function MapLegend({ lastUpdated, demoMode }) {
               Live data offline
             </p>
           ) : (
-            <p className={`text-[9px] leading-snug ${isStale ? 'text-yellow-400' : 'text-gray-400'}`}>
-              {isStale && '⚠️ '}Updated {relative}
+            <p className={`text-[9px] leading-snug flex items-center gap-1 ${isStale ? 'text-yellow-400' : 'text-gray-400'}`}>
+              {isStale && <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" aria-hidden="true" />}
+              Updated {relative}
             </p>
           )}
         </div>
