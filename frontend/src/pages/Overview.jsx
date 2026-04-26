@@ -35,6 +35,7 @@ import MUNICIPALITIES_GEOJSON from '../municipalities.geojson';
 import HISTORICAL_EVENTS      from '../data/historicalEvents.json';
 import { fetchHistoricalAssessment } from '../lib/openmeteo';
 import BULGARIA_OUTLINE from '../lib/bulgaria-outline';
+import { worstStatus, isAlerting } from '../lib/severity';
 import { useDashboardContext } from '../components/Layout';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
@@ -558,6 +559,44 @@ export default function Overview() {
   const statusFor = (regionId) =>
     regionStatuses.find(s => s.region_id === regionId)?.status ?? null;
 
+  // ── Oblast pill aggregates ──────────────────────────────────────────────
+  // The oblast Bedrock assessment averages metrics across the whole footprint,
+  // so its verdict can read "SAFE" while individual municipalities underneath
+  // are stressed. We roll the pill up to max(oblast, ...children) so the badge
+  // never visually contradicts the polygons it sits on. The breakdown chip
+  // ("2/5") shows how many child municipalities are at-or-above WATCH — only
+  // when at least one child is alerting, to keep the pill quiet otherwise.
+  const oblastAggregates = useMemo(() => {
+    const statusByKey = Object.fromEntries(
+      regionStatuses.map(s => [s.region_id, s.status])
+    );
+    const childrenByOblast = {};
+    for (const f of MUNICIPALITIES_GEOJSON.features) {
+      const parentId = REGION_NAME_TO_ID[f.properties.NAME_1];
+      if (!parentId) continue;
+      (childrenByOblast[parentId] ??= []).push(f.properties.GID_2);
+    }
+
+    const out = {};
+    for (const region of REGIONS) {
+      const oblastStatus = statusByKey[region.id] ?? null;
+      const childGids    = childrenByOblast[region.id] ?? [];
+      const childStatuses = childGids
+        .map(gid => statusByKey[gid])
+        .filter(Boolean);
+
+      const status      = worstStatus([oblastStatus, ...childStatuses]);
+      const alertingN   = childStatuses.filter(isAlerting).length;
+      const totalN      = childGids.length;
+
+      out[region.id] = {
+        status,
+        breakdown: alertingN > 0 ? { count: alertingN, total: totalN } : null,
+      };
+    }
+    return out;
+  }, [regionStatuses]);
+
   return (
     <div className="absolute inset-0">
       <Map
@@ -622,21 +661,25 @@ export default function Overview() {
           <Layer {...MUNICIPALITIES_LABEL_LAYER} />
         </Source>
 
-        {REGIONS.map(region => (
-          <Marker
-            key={region.id}
-            longitude={region.longitude}
-            latitude={region.latitude}
-            anchor="center"
-          >
-            <StatusPill
-              regionName={region.name}
-              status={statusFor(region.id)}
-              isActive={selectedRegion?.id === region.id}
-              onClick={() => handleRegionClick(region)}
-            />
-          </Marker>
-        ))}
+        {REGIONS.map(region => {
+          const agg = oblastAggregates[region.id] ?? {};
+          return (
+            <Marker
+              key={region.id}
+              longitude={region.longitude}
+              latitude={region.latitude}
+              anchor="center"
+            >
+              <StatusPill
+                regionName={region.name}
+                status={agg.status ?? statusFor(region.id)}
+                breakdown={agg.breakdown}
+                isActive={selectedRegion?.id === region.id}
+                onClick={() => handleRegionClick(region)}
+              />
+            </Marker>
+          );
+        })}
       </Map>
 
       <MapLegend

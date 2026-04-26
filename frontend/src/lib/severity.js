@@ -84,3 +84,25 @@ export function severityCounts(regionStatuses) {
   }
   return counts;
 }
+
+/**
+ * Picks the worst status from a list, ranked by SEVERITY_ORDER
+ * (NORMAL < WATCH < WARNING < CRITICAL). Nulls/undefineds skipped. Used to
+ * roll an oblast pill up from its own assessment + its children, so the pill
+ * never reads "SAFE" while a sub-municipality underneath says "WATCH".
+ */
+export function worstStatus(statuses) {
+  let best = null;
+  let bestTier = -1;
+  for (const s of statuses ?? []) {
+    if (!s) continue;
+    const tier = SEVERITY_ORDER.indexOf(severityOf(s));
+    if (tier > bestTier) { best = s; bestTier = tier; }
+  }
+  return best;
+}
+
+/** True if a status is more severe than plain "SAFE". */
+export function isAlerting(status) {
+  return Boolean(status) && severityOf(status) !== 'NORMAL';
+}
