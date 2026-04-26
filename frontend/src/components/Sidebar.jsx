@@ -16,6 +16,7 @@ import { NavLink } from 'react-router-dom';
 const NAV_LINKS = [
   { to: '/',           end: true,  icon: '🏠', label: 'Overview'  },
   { to: '/incidents',              icon: '🚨', label: 'Incidents' },
+  { to: '/dams',                   icon: '💧', label: 'Dams'      },
   { to: '/sources',                icon: '📚', label: 'Sources'   },
 ];
 

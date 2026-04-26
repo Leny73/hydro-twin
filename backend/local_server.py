@@ -47,6 +47,7 @@ from status_handler    import lambda_handler as status_handler
 from cron_handler      import lambda_handler as cron_handler
 from reports_handler   import lambda_handler as reports_handler
 from chat_handler      import lambda_handler as chat_handler
+from dams_handler      import lambda_handler as dams_handler
 
 app = Flask(__name__)
 
@@ -105,6 +106,14 @@ def chat_alert():
     if request.method == "OPTIONS":
         return "", 204
     return _invoke_lambda(chat_handler)
+
+
+@app.route("/dams", methods=["GET", "OPTIONS"])
+def dams():
+    """GET /dams — returns current status for all monitored dams."""
+    if request.method == "OPTIONS":
+        return "", 204
+    return _invoke_lambda(dams_handler)
 
 
 @app.route("/cron-run", methods=["POST"])
