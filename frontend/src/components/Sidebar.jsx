@@ -1,6 +1,14 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../logo.jpg';
+import {
+  HomeIcon,
+  BellAlertIcon,
+  BookOpenIcon,
+  ExclamationTriangleIcon,
+  ClockIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 
 /**
  * Sidebar.jsx — left navigation (static + mobile drawer)
@@ -15,9 +23,9 @@ import logoUrl from '../../logo.jpg';
  */
 
 const NAV_LINKS = [
-  { to: '/',           end: true,  icon: '🏠', label: 'Overview'  },
-  { to: '/incidents',              icon: '🚨', label: 'Incidents' },
-  { to: '/sources',                icon: '📚', label: 'Sources'   },
+  { to: '/',           end: true,  Icon: HomeIcon,      iconColor: 'text-cyan-400',   label: 'Overview'  },
+  { to: '/incidents',              Icon: BellAlertIcon, iconColor: 'text-rose-400',   label: 'Incidents' },
+  { to: '/sources',                Icon: BookOpenIcon,  iconColor: 'text-violet-400', label: 'Sources'   },
 ];
 
 function navClass({ isActive }) {
@@ -66,7 +74,9 @@ function LatestUpdateCard({ lastUpdated, isStale }) {
       aria-label="Latest data update"
     >
       <div className={`w-10 h-10 rounded-full border flex items-center justify-center flex-shrink-0 ${accent.dot}`}>
-        <span className="text-lg" aria-hidden="true">{isStale ? '⚠️' : '🕒'}</span>
+        {isStale
+          ? <ExclamationTriangleIcon className="w-5 h-5 text-yellow-300" aria-hidden="true" />
+          : <ClockIcon               className="w-5 h-5 text-cyan-300"   aria-hidden="true" />}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[9px] uppercase tracking-widest text-gray-500 leading-none mb-1">
@@ -108,7 +118,7 @@ function NavContent({ lastUpdated, isStale, onLinkClick }) {
             className={navClass}
             onClick={onLinkClick}
           >
-            <span aria-hidden="true">{link.icon}</span>
+            <link.Icon className={`w-4 h-4 flex-shrink-0 ${link.iconColor}`} aria-hidden="true" />
             <span>{link.label}</span>
           </NavLink>
         ))}
@@ -170,7 +180,7 @@ export function MobileNav({ lastUpdated, isStale, isOpen, onClose }) {
                      rounded-md text-gray-400 hover:text-white hover:bg-gray-800
                      cursor-pointer"
         >
-          <span className="text-xl leading-none" aria-hidden="true">✕</span>
+          <XMarkIcon className="w-5 h-5" aria-hidden="true" />
         </button>
         <NavContent
           lastUpdated={lastUpdated}
