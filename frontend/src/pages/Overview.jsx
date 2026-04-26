@@ -353,6 +353,9 @@ export default function Overview() {
     const statusByRegion = Object.fromEntries(
       regionStatuses.map(s => [s.region_id, s.status])
     );
+    if (selectedRegion && displayedAssessment?.replay && displayedAssessment?.status) {
+      statusByRegion[selectedRegion.id] = displayedAssessment.status;
+    }
     return {
       ...REGIONS_GEOJSON,
       features: REGIONS_GEOJSON.features.map(f => {
@@ -367,7 +370,7 @@ export default function Overview() {
         };
       }),
     };
-  }, [regionStatuses]);
+  }, [regionStatuses, selectedRegion, displayedAssessment]);
 
   // ── Painted municipalities ──────────────────────────────────────────────
   // Same shared snapshot as oblasts — cron writes both into HydroTwinStatus
@@ -377,6 +380,9 @@ export default function Overview() {
     const statusByGid = Object.fromEntries(
       regionStatuses.map(s => [s.region_id, s.status])
     );
+    if (selectedRegion && displayedAssessment?.replay && displayedAssessment?.status) {
+      statusByGid[selectedRegion.id] = displayedAssessment.status;
+    }
     return {
       ...MUNICIPALITIES_GEOJSON,
       features: MUNICIPALITIES_GEOJSON.features.map(f => {
@@ -385,7 +391,7 @@ export default function Overview() {
         return { ...f, properties: { ...f.properties, ...extra } };
       }),
     };
-  }, [regionStatuses]);
+  }, [regionStatuses, selectedRegion, displayedAssessment]);
 
   // ── Live /assess fetch ──────────────────────────────────────────────────
   const fetchAssessment = useCallback(async (region) => {
@@ -702,10 +708,11 @@ export default function Overview() {
 
       {!selectedRegion && !isLoading && (
         <div
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20
+          className="absolute left-1/2 -translate-x-1/2 z-20
                      bg-gray-900/85 border border-gray-700 backdrop-blur-sm
                      text-gray-400 text-xs px-5 py-2.5 rounded-full
                      pointer-events-none select-none"
+          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
         >
           Tap a region to view assessment
         </div>

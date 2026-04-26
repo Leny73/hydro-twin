@@ -67,7 +67,7 @@ export default function MapLegend({ lastUpdated, demoMode }) {
         onClick={() => setOpen(true)}
         aria-label="Show status legend"
         aria-expanded="false"
-        className="absolute z-20 top-14 left-4 mt-2
+        className="absolute z-20 top-2 left-4
                    w-11 h-11 flex items-center justify-center
                    bg-gray-900/85 backdrop-blur-md border border-gray-700
                    rounded-lg cursor-pointer
@@ -80,7 +80,7 @@ export default function MapLegend({ lastUpdated, demoMode }) {
 
   return (
     <div
-      className="absolute z-20 top-14 left-4 mt-2
+      className="absolute z-20 top-2 left-4
                  bg-gray-900/85 backdrop-blur-md border border-gray-700
                  rounded-lg p-2.5 select-none
                  w-44"
