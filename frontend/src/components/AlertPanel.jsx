@@ -6,6 +6,7 @@ import CycloneChart       from './CycloneChart';
 import RegionReports      from './RegionReports';
 import DatePicker         from './DatePicker';
 import CuratedEventChips  from './CuratedEventChips';
+import AlertChat          from './AlertChat';
 
 /**
  * AlertPanel.jsx — AI Risk Assessment Panel (v3 + BF1-4 hierarchy)
@@ -99,6 +100,7 @@ export default function AlertPanel({
   const [submitting,  setSubmitting]  = useState(false);
   const [toast,       setToast]       = useState(null);
   const [replayOpen,  setReplayOpen]  = useState(false);
+  const [chatOpen,    setChatOpen]    = useState(false);
 
   // Reset transient state when region changes
   useEffect(() => {
@@ -107,6 +109,7 @@ export default function AlertPanel({
     setSubmitting(false);
     setToast(null);
     setReplayOpen(false);
+    setChatOpen(false);
   }, [region?.id]);
 
   // Auto-expand replay section whenever the user is actually in replay mode
@@ -175,24 +178,26 @@ export default function AlertPanel({
     }
   };
 
-  return (
+  const alertColor = assessment ? tagColor(meta.tag) : '#374151';
+
+  return (<>
     <aside
-      className={`
+      className="
         fixed z-30
         flex flex-col border backdrop-blur-md
         bg-gray-900/95 text-white overflow-y-auto
         transition-all duration-300 ease-in-out
-
-        /* Mobile: bottom sheet */
         bottom-0 left-0 right-0 rounded-t-2xl
         max-h-[68vh]
-
-        /* Desktop: right sidebar — sits below TopBar (h-16) and above DataSourcesBar (h-14) */
         sm:bottom-[72px] sm:left-auto sm:right-4 sm:top-[80px]
         sm:w-96 sm:rounded-xl sm:max-h-none
-
-        ${assessment ? meta.border : 'border-gray-700'}
-      `}
+      "
+      style={{
+        borderColor: alertColor,
+        boxShadow: assessment
+          ? `0 0 32px ${alertColor}28, inset 0 1px 0 ${alertColor}18`
+          : 'none',
+      }}
       aria-label="AI Risk Assessment Panel"
     >
       {/* ── Sticky top (BF2-5): drag handle + header always visible ── */}
@@ -200,12 +205,18 @@ export default function AlertPanel({
                       border-b border-gray-700/50
                       px-5 pt-4 pb-3 flex flex-col gap-2">
         <div className="sm:hidden flex justify-center" aria-hidden="true">
-          <div className="w-10 h-1 bg-gray-600 rounded-full" />
+          <div
+            className="w-10 h-1 rounded-full transition-colors duration-300"
+            style={{ backgroundColor: assessment ? `${alertColor}90` : '#4B5563' }}
+          />
         </div>
 
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">
+            <p
+              className="text-[10px] uppercase tracking-widest mb-0.5 transition-colors duration-300"
+              style={{ color: assessment ? alertColor : '#6B7280' }}
+            >
               HydroTwin Alert
             </p>
             <h2 className="text-base font-bold leading-snug text-white truncate">
@@ -229,6 +240,19 @@ export default function AlertPanel({
               >
                 {meta.tag}
               </span>
+            )}
+            {assessment && !isReplay && (
+              <button
+                onClick={() => setChatOpen(true)}
+                className="w-8 h-8 flex items-center justify-center
+                           rounded-full bg-cyan-900/60 hover:bg-cyan-800 active:scale-90
+                           text-cyan-400 hover:text-cyan-200 transition-all duration-150
+                           cursor-pointer"
+                aria-label="Open AI chat assistant"
+                title="Ask HydroSentry"
+              >
+                💬
+              </button>
             )}
             <button
               onClick={onClose}
@@ -437,7 +461,7 @@ export default function AlertPanel({
           {/* 7d. Citizen reports for THIS oblast — ground truth pairing */}
           {!isReplay && <RegionReports region={region} />}
 
-          {/* 8. Replay & past events — collapsible */}
+          {/* 9. Replay & past events — collapsible */}
           <CollapsibleSection
             title="🕓 Replay & past events"
             isOpen={replayOpen}
@@ -515,6 +539,34 @@ export default function AlertPanel({
       )}
       </div>
     </aside>
+
+    {/* ── Chat overlay — floating above the assessment panel ── */}
+    {chatOpen && (
+      <div
+        className="
+          fixed z-40
+          flex flex-col border backdrop-blur-md
+          bg-gray-900/98 text-white
+          bottom-0 left-0 right-0 rounded-t-2xl
+          max-h-[85vh]
+          sm:bottom-[72px] sm:left-auto sm:right-4 sm:top-[80px]
+          sm:w-96 sm:rounded-xl sm:max-h-none
+        "
+        style={{
+          borderColor: alertColor,
+          boxShadow: `0 0 32px ${alertColor}28, inset 0 1px 0 ${alertColor}18`,
+        }}
+        aria-label="HydroSentry Chat Assistant"
+        role="dialog"
+      >
+        <AlertChat
+          region={region}
+          assessment={assessment}
+          onClose={() => setChatOpen(false)}
+        />
+      </div>
+    )}
+  </>
   );
 }
 
