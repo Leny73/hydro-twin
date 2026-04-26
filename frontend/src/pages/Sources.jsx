@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
 import {
-  SignalIcon,
   EyeIcon,
-  ArrowTrendingUpIcon,
   MapPinIcon,
   CloudIcon,
   ServerIcon,
@@ -27,15 +25,6 @@ import { useDashboardContext } from '../components/Layout';
 
 const SOURCES = [
   {
-    Icon:      SignalIcon,
-    iconColor: 'text-cyan-400',
-    name:      'Copernicus Sentinel-1',
-    family:    'EU Copernicus Programme',
-    what:      'C-band Synthetic Aperture Radar — flood extent mapping, soil moisture proxy from SAR backscatter. Cloud-penetrating, day-and-night.',
-    cadence:   'Tile revisit ≈ 6 days (per region)',
-    href:      'https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-1',
-  },
-  {
     Icon:      EyeIcon,
     iconColor: 'text-green-400',
     name:      'Copernicus Sentinel-2',
@@ -43,15 +32,6 @@ const SOURCES = [
     what:      'Multispectral optical imagery — vegetation health (NDVI from B4/B8), surface water classification, drought stress indicators.',
     cadence:   'Tile revisit ≈ 5 days (per region)',
     href:      'https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-2',
-  },
-  {
-    Icon:      ArrowTrendingUpIcon,
-    iconColor: 'text-blue-400',
-    name:      'Copernicus Sentinel-3',
-    family:    'EU Copernicus Programme',
-    what:      'SRAL altimetry — river-level estimation, lake-level monitoring, soil-temperature anomalies.',
-    cadence:   'Daily near-global coverage',
-    href:      'https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-3',
   },
   {
     Icon:      MapPinIcon,
@@ -140,7 +120,7 @@ const SOURCES = [
     name:      'ISME-HYDRO',
     family:    'Water Resources Management Platform · Mozaika',
     what:      'Comprehensive dam and river monitoring system combining in-situ measurements, satellite data, and deep learning. Official platform of the Bulgarian Executive Agency for Exploitation and Monitoring of the Danube River — issues flood and drought advance warnings for the Danube basin.',
-    cadence:   'Real-time in-situ + satellite feeds',
+    cadence:   'Historical archive · in-situ + satellite records',
     href:      'https://isme-hydro.com/',
   },
 ];

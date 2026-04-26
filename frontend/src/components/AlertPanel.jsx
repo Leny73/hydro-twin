@@ -688,7 +688,7 @@ export default function AlertPanel({
             ) : (
               <>
                 <span className="text-gray-400">Data:</span>{' '}
-                Copernicus EO (Sentinel-1/2) + OpenMeteo
+                Copernicus Sentinel-2 + OpenMeteo
                 <br />
                 <span className="text-gray-400">Assessed:</span>{' '}
                 {new Date().toUTCString()}
@@ -794,7 +794,6 @@ function Section({ Icon, iconColor, label, content, accentColor }) {
 
 const ASSESSMENT_SOURCES = [
   { Icon: Satellite,  iconColor: 'text-green-400', name: 'Sentinel-2', sub: 'NDVI · NDWI · vegetation' },
-  { Icon: Radio,      iconColor: 'text-cyan-400',  name: 'Sentinel-1', sub: 'SAR soil moisture'        },
   { Icon: CloudRain,  iconColor: 'text-sky-400',   name: 'OpenMeteo',  sub: 'Precipitation · ERA5'     },
 ];
 
@@ -812,7 +811,7 @@ function AssessmentSources({ sources, isReplay }) {
           </span>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5">
         {ASSESSMENT_SOURCES.map(s => (
           <div
             key={s.name}
