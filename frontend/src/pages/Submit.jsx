@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import IncidentForm from '../components/IncidentForm';
+import logoUrl from '../../logo.jpg';
 
 /**
  * Submit.jsx — public, citizen-facing incident submission page
@@ -21,7 +23,13 @@ export default function Submit() {
     <div className="h-[100dvh] overflow-y-auto bg-gray-950 text-white font-mono flex flex-col">
       <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <span className="text-xl select-none" aria-hidden="true">💧</span>
+          <img
+            src={logoUrl}
+            alt=""
+            aria-hidden="true"
+            className="w-9 h-9 object-contain select-none flex-shrink-0"
+            draggable="false"
+          />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold tracking-widest text-cyan-400 uppercase leading-none">
               HydroTwin · Report an incident
@@ -51,7 +59,7 @@ function ThankYou({ onAnother }) {
       role="status"
       aria-live="polite"
     >
-      <span className="text-3xl" aria-hidden="true">✅</span>
+      <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" aria-hidden="true" />
       <h2 className="text-base font-bold text-emerald-100">
         Incident received — thank you
       </h2>

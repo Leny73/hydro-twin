@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import { useDashboardContext } from '../components/Layout';
 import IncidentsList from '../components/IncidentsList';
 
@@ -31,7 +32,7 @@ export default function Incidents() {
           className="bg-cyan-950/40 border border-cyan-700/50 rounded-xl p-5 flex items-center gap-4
                      hover:border-cyan-500/70 hover:bg-cyan-950/60 transition-colors group"
         >
-          <span className="text-2xl flex-shrink-0" aria-hidden="true">📝</span>
+          <PencilSquareIcon className="w-6 h-6 flex-shrink-0 text-cyan-400" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-white leading-tight group-hover:text-cyan-300 transition-colors">
               Submit an incident
