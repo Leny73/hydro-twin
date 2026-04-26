@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useDashboardContext } from '../components/Layout';
 
 /**
@@ -17,7 +18,7 @@ const SOURCES = [
     family:  'EU Copernicus Programme',
     what:    'C-band Synthetic Aperture Radar — flood extent mapping, soil moisture proxy from SAR backscatter. Cloud-penetrating, day-and-night.',
     cadence: 'Tile revisit ≈ 6 days (per region)',
-    href:    'https://sentinel.esa.int/web/sentinel/missions/sentinel-1',
+    href:    'https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-1',
   },
   {
     icon:    '🛰️',
@@ -25,7 +26,7 @@ const SOURCES = [
     family:  'EU Copernicus Programme',
     what:    'Multispectral optical imagery — vegetation health (NDVI from B4/B8), surface water classification, drought stress indicators.',
     cadence: 'Tile revisit ≈ 5 days (per region)',
-    href:    'https://sentinel.esa.int/web/sentinel/missions/sentinel-2',
+    href:    'https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-2',
   },
   {
     icon:    '🛰️',
@@ -33,7 +34,7 @@ const SOURCES = [
     family:  'EU Copernicus Programme',
     what:    'SRAL altimetry — river-level estimation, lake-level monitoring, soil-temperature anomalies.',
     cadence: 'Daily near-global coverage',
-    href:    'https://sentinel.esa.int/web/sentinel/missions/sentinel-3',
+    href:    'https://www.esa.int/Applications/Observing_the_Earth/Copernicus/Sentinel-3',
   },
   {
     icon:    '📡',
@@ -131,6 +132,39 @@ export default function Sources() {
             extract from each, and how often they update.
           </p>
         </section>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Link
+            to="/submit"
+            className="bg-cyan-950/40 border border-cyan-700/50 rounded-xl p-5 flex items-start gap-3
+                       hover:border-cyan-500/70 hover:bg-cyan-950/60 transition-colors group"
+          >
+            <span className="text-2xl flex-shrink-0" aria-hidden="true">📝</span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white leading-tight group-hover:text-cyan-300 transition-colors">
+                Submit an incident
+              </p>
+              <p className="text-xs text-gray-400 leading-relaxed mt-1">
+                Report a flood or drought observation from the field — visible on the operator dashboard within seconds.
+              </p>
+            </div>
+          </Link>
+          <Link
+            to="/incidents"
+            className="bg-gray-900/60 border border-gray-800 rounded-xl p-5 flex items-start gap-3
+                       hover:border-gray-600 hover:bg-gray-900/80 transition-colors group"
+          >
+            <span className="text-2xl flex-shrink-0" aria-hidden="true">🗂️</span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white leading-tight group-hover:text-gray-200 transition-colors">
+                Incoming incidents
+              </p>
+              <p className="text-xs text-gray-400 leading-relaxed mt-1">
+                Operator triage list — all citizen reports, filterable by region and severity.
+              </p>
+            </div>
+          </Link>
+        </div>
 
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {SOURCES.map(s => (
