@@ -1,0 +1,4 @@
+aoi_name,date,drought_label_binary,drought_label_3tier,error
+pleven_small,2026-04-01,0,0,no_overlap
+pleven_levski,2026-04-01,0,0,no_overlap
+danube_belene_svishtov,2026-04-01,0,0,no_overlap

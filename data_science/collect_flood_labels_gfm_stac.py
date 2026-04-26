@@ -88,15 +88,21 @@ def load_aois(path: str) -> dict[str, list[float]]:
     return aois
 
 
-def make_windows(start: str, end: str, window_days: int) -> list[tuple[str, str]]:
+def make_windows(start: str, end: str, window_days: int, step_days: int | None = None):
+    if step_days is None:
+        step_days = window_days
+
     s = datetime.strptime(start, "%Y-%m-%d")
     e = datetime.strptime(end, "%Y-%m-%d")
+
     windows = []
     cur = s
+
     while cur <= e:
         win_end = min(cur + timedelta(days=window_days - 1), e)
         windows.append((cur.strftime("%Y-%m-%d"), win_end.strftime("%Y-%m-%d")))
-        cur = win_end + timedelta(days=1)
+        cur = cur + timedelta(days=step_days)
+
     return windows
 
 
@@ -127,6 +133,28 @@ def choose_collection(stac_url: str, explicit: str | None) -> str:
     if len(matches) > 1:
         print(f"Other candidate collections: {matches[1:]}")
     return matches[0]
+
+def real_flood_label_3tier(
+    area_km2: float,
+    fraction: float | None,
+    aoi_area_km2: float,
+) -> int:
+    fraction = fraction or 0.0
+
+    # Small AOI, e.g. pleven_small
+    if aoi_area_km2 < 100:
+        if area_km2 < 2.0 or fraction < 0.05:
+            return 0
+        if area_km2 < 5.0:
+            return 1
+        return 2
+
+    # Larger AOIs
+    if area_km2 < 10.0 or fraction < 0.02:
+        return 0
+    if area_km2 < 50.0 or fraction < 0.08:
+        return 1
+    return 2
 
 def process_downloaded_flood_tiff_to_row(
     *,
@@ -165,9 +193,9 @@ def process_downloaded_flood_tiff_to_row(
         "aoi_area_km2": stats["aoi_area_km2"],
         "gfm_flooded_area_km2": area,
         "gfm_flood_fraction": fraction,
-        "flood_detected": int(area >= binary_threshold_km2),
-        "flood_label_binary": label_binary(area, binary_threshold_km2),
-        "flood_label_3tier": label_3tier(area, tier_minor_km2, tier_significant_km2),
+        "flood_detected": real_flood_label(area, fraction, stats["aoi_area_km2"]),
+        "flood_label_binary": real_flood_label(area, fraction, stats["aoi_area_km2"]),
+        "flood_label_3tier": real_flood_label_3tier(area, fraction, stats["aoi_area_km2"]),
         "binary_threshold_km2": binary_threshold_km2,
         "tier_minor_km2": tier_minor_km2,
         "tier_significant_km2": tier_significant_km2,
@@ -269,6 +297,20 @@ def pixel_area_km2(src: rasterio.DatasetReader) -> float:
 from rasterio.warp import transform_geom
 from rasterio.errors import WindowError
 
+def real_flood_label(
+    area_km2: float,
+    fraction: float | None,
+    aoi_area_km2: float,
+) -> int:
+    fraction = fraction or 0.0
+
+    # Small AOI: require meaningful local inundation
+    if aoi_area_km2 < 100:
+        return int(area_km2 >= 2.0 and fraction >= 0.05)
+
+    # Medium / large AOI: require disaster-scale footprint
+    return int(area_km2 >= 10.0 and fraction >= 0.02)
+
 
 def flood_stats(asset_path: Path, bbox: list[float], flood_value: int = 1) -> dict[str, Any]:
     geom_4326 = mapping(box(*bbox))
@@ -336,14 +378,24 @@ def label_3tier(area_km2: float, minor_km2: float, significant_km2: float) -> in
 def collect_labels(args: argparse.Namespace) -> pd.DataFrame:
     aois = load_aois(args.aois)
     collection = choose_collection(args.stac_url, args.collection)
-    rows = []
+
+    out_path = Path(args.out)
+    if out_path.exists() and not args.resume:
+        out_path.unlink()
 
     tmp_root = Path(args.download_dir)
     tmp_root.mkdir(parents=True, exist_ok=True)
 
-    for aoi_name, bbox in aois.items():
-        for date_start, date_end in make_windows(args.start, args.end, args.window_days):
-            print(f"[flood] {aoi_name}: {date_start} → {date_end}")
+    rows = []
+
+    for date_start, date_end in make_windows(
+        args.start,
+        args.end,
+        args.window_days,
+        args.step_days,
+    ):
+        for aoi_name, bbox in aois.items():
+            print(f"[flood] {date_start} → {date_end} | {aoi_name}")
 
             items = search_items(
                 args.stac_url,
@@ -394,11 +446,7 @@ def collect_labels(args: argparse.Namespace) -> pd.DataFrame:
                     errors.append(f"{getattr(item, 'id', 'unknown')}: {exc}")
 
                 finally:
-                    if (
-                        not args.keep_downloads
-                        and local is not None
-                        and local.exists()
-                    ):
+                    if not args.keep_downloads and local is not None and local.exists():
                         try:
                             local.unlink()
                         except Exception:
@@ -407,16 +455,15 @@ def collect_labels(args: argparse.Namespace) -> pd.DataFrame:
             if item_rows:
                 best = max(item_rows, key=lambda r: r["gfm_flooded_area_km2"])
 
-                rows.append({
+                final_row = {
                     **best,
                     "gfm_items": len(items),
                     "gfm_items_used": items_used,
                     "gfm_asset_keys": ",".join(sorted(asset_keys)),
                     "errors": " | ".join(errors[:3]),
-                })
-
+                }
             else:
-                rows.append({
+                final_row = {
                     "aoi_name": aoi_name,
                     "date_start": date_start,
                     "date_end": date_end,
@@ -434,18 +481,28 @@ def collect_labels(args: argparse.Namespace) -> pd.DataFrame:
                     "flood_detected": 0,
                     "flood_label_binary": 0,
                     "flood_label_3tier": 0,
-                    "binary_threshold_km2": args.binary_threshold_km2,
-                    "tier_minor_km2": args.tier_minor_km2,
-                    "tier_significant_km2": args.tier_significant_km2,
                     "source": f"GFM_STAC:{collection}",
                     "errors": " | ".join(errors[:3]),
-                })
+                }
 
-    df = pd.DataFrame(rows)
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(args.out, index=False)
-    return df
+            append_row_to_csv(final_row, args.out)
+            rows.append(final_row)
 
+    return pd.DataFrame(rows)
+
+def append_row_to_csv(row: dict, out_csv: str) -> None:
+    path = Path(out_csv)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    df = pd.DataFrame([row])
+    write_header = not path.exists()
+
+    df.to_csv(
+        path,
+        mode="a",
+        header=write_header,
+        index=False,
+    )
 
 def main() -> None:
     p = argparse.ArgumentParser()
@@ -465,6 +522,8 @@ def main() -> None:
     p.add_argument("--tier-significant-km2", type=float, default=5.0)
     p.add_argument("--download-dir", default="data/raw/gfm_stac")
     p.add_argument("--keep-downloads", action="store_true")
+    p.add_argument("--step-days", type=int, default=None)
+    p.add_argument("--resume", action="store_true")
     args = p.parse_args()
 
     if args.list_collections:

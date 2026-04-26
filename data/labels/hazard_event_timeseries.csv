@@ -1,0 +1,7 @@
+aoi_name,target_date,gfm_flooded_area_km2,gfm_flood_fraction,flood_event,flood_label_binary,flood_label_3tier,cdi_majority,cdi_max,cdi_mean,selected_cdi_value,drought_event,drought_label_binary,drought_label_3tier,hazard_status,hazard_label_multiclass
+danube_belene_svishtov,2026-04-01,,,0,0,0,,,,,0,0,0,NO_EVENT,0
+danube_belene_svishtov,2026-04-26,136.5724,0.152427,1,1,2,,,,,0,0,0,FLOOD_EVENT,2
+pleven_levski,2026-04-01,,,0,0,0,,,,,0,0,0,NO_EVENT,0
+pleven_levski,2026-04-26,254.4912,0.157346,1,1,2,,,,,0,0,0,FLOOD_EVENT,2
+pleven_small,2026-04-01,,,0,0,0,,,,,0,0,0,NO_EVENT,0
+pleven_small,2026-04-26,0.7388,0.029573,1,1,1,,,,,0,0,0,FLOOD_EVENT,2

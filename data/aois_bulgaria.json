@@ -1,0 +1,36 @@
+{
+  "pleven_small": [24.5858, 43.3954, 24.6475, 43.4404],
+  "pleven_levski": [24.55, 43.35, 25.15, 43.65],
+  "danube_belene_svishtov": [25.05, 43.55, 25.45, 43.80],
+  "danube_ruse_slivo_pole": [26.00, 43.85, 26.45, 44.05],
+  "danube_vidin_lom": [22.70, 43.65, 23.45, 44.10],
+  "danube_kozloduy_oriahovo": [23.45, 43.55, 24.15, 43.95],
+  "danube_nikopol": [24.70, 43.55, 25.05, 43.85],
+
+  "dobrich_dobrudzha": [27.55, 43.35, 28.05, 43.75],
+  "silistra_dobrudzha": [27.00, 43.85, 27.55, 44.10],
+  "shumen_targovishte": [26.40, 43.05, 27.20, 43.55],
+
+  "varna_coast": [27.65, 43.05, 28.10, 43.45],
+  "burgas_coast": [27.20, 42.25, 27.90, 42.75],
+  "kamchia_river": [27.45, 42.75, 28.05, 43.10],
+
+  "sofia_plain_iskar": [23.10, 42.55, 23.70, 42.95],
+  "iskar_gorge": [23.25, 42.90, 23.75, 43.35],
+  "yantra_veliko_tarnovo": [25.40, 43.00, 26.05, 43.35],
+  "osam_lovech": [24.45, 42.95, 25.05, 43.30],
+  "vit_pleven": [24.20, 43.20, 24.85, 43.55],
+
+  "maritsa_plovdiv": [24.55, 42.05, 24.95, 42.25],
+  "maritsa_pazardzhik": [24.00, 42.05, 24.45, 42.35],
+  "maritsa_harmanli_svilengrad": [25.85, 41.75, 26.35, 42.05],
+  "tundzha_yambol_elhovo": [26.20, 41.90, 26.95, 42.45],
+  "arda_kardzhali": [25.15, 41.50, 25.75, 41.85],
+
+  "struma_blago_county": [22.85, 41.75, 23.45, 42.25],
+  "mesta_gotse_delchev": [23.50, 41.40, 24.10, 41.85],
+
+  "stara_zagora_chirpan": [25.20, 42.05, 25.75, 42.35],
+  "haskovo_dimitrovgrad": [25.35, 41.85, 25.85, 42.20],
+  "sliven_nova_zagora": [26.00, 42.35, 26.75, 42.75]
+}
