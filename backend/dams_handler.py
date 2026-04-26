@@ -76,41 +76,41 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 # bbox = [lon_min, lat_min, lon_max, lat_max] — tight 5 km window around the dam body
 DAM_CONFIG = [
     {
-        # Dam wall centre from OSM way/168092719 (GeoJSON)
-        # Reservoir extends upstream (east) along the Arda river
+        # Source: Wikidata Q6369166, Wikipedia "41°38′0″N 25°20′24″E"
+        # Dam wall at 25.34E; Arda flows W→E so reservoir extends WEST of the wall
         "id":       "kardzhali",
         "name":     "Язовир Кърджали",
         "name_xls": "Кърджали",
-        "lat":      41.6326,
-        "lon":      25.3385,
-        # bbox covers the Kardzhali reservoir water body (not just the wall)
-        "bbox":     [25.32, 41.57, 25.56, 41.68],
+        "lat":      41.6333,
+        "lon":      25.3400,
+        # Reservoir water body: upstream (west) of the dam wall
+        "bbox":     [24.90, 41.55, 25.34, 41.75],
         "river":    "Арда",
         "capacity_mln_m3": 497.236,
     },
     {
-        # Dam wall centre from OSM way/485280749 (GeoJSON)
-        # Reservoir extends upstream (east) along the Arda river
+        # Source: Wikidata Q6395863 "41°36′43.9″N 25°38′25.8″E"
+        # Reservoir fills the river stretch between Кърджали dam (25.34E) and this wall (25.64E)
         "id":       "studen-kladenets",
         "name":     "Язовир Студен Кладенец",
         "name_xls": "Ст. Кладенец",
         "lat":      41.6122,
-        "lon":      25.6406,
-        # bbox covers the Studen Kladenets reservoir water body
-        "bbox":     [25.64, 41.57, 25.90, 41.66],
+        "lon":      25.6405,
+        # Reservoir water body: between Кърджали dam (west) and this dam (east)
+        "bbox":     [25.34, 41.55, 25.64, 41.68],
         "river":    "Арда",
         "capacity_mln_m3": 387.772,
     },
     {
-        # Dam wall centre from OSM relation/11949072 (GeoJSON)
-        # Reservoir extends upstream (west) along the Arda river
+        # Source: Wikidata Q12274444 "41°35′2″N 26°6′25″E", Wikipedia confirmed
+        # Reservoir fills the river stretch between Ст. Кладенец (25.64E) and this wall (26.11E)
         "id":       "ivaylovgrad",
         "name":     "Язовир Ивайловград",
         "name_xls": "Ивайловград",
         "lat":      41.5839,
-        "lon":      26.1076,
-        # bbox covers the Ivaylovgrad reservoir water body
-        "bbox":     [25.88, 41.49, 26.11, 41.60],
+        "lon":      26.1071,
+        # Reservoir water body: between Ст. Кладенец dam (west) and this dam (east)
+        "bbox":     [25.64, 41.44, 26.11, 41.65],
         "river":    "Арда",
         "capacity_mln_m3": 156.702,
     },

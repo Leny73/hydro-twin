@@ -32,7 +32,7 @@ const DAMS_ENDPOINT = API_ENDPOINT.replace(/\/assess$/, '/dams');
 // ── Set true to always show demo scenarios (all 3 alert states) ───────────────
 // Recommended for hackathon pitch — shows STABLE / WATER_REGIME / OPEN_GATES
 // regardless of backend availability.
-const FORCE_DEMO = true;
+const FORCE_DEMO = false;
 
 // ── Alert-level display metadata ──────────────────────────────────────────────
 const ALERT_META = {
@@ -87,7 +87,7 @@ const DEMO_RESPONSE = {
     {
       // ✅ STABLE — Кърджали sits comfortably between 25% and 90%
       id: 'kardzhali', name: 'Язовир Кърджали', river: 'Арда',
-      lat: 41.6326, lon: 25.3385, capacity_mln_m3: 497.236,
+      lat: 41.6333, lon: 25.3400, capacity_mln_m3: 497.236,
       fill_pct: 62.4, volume_mln_m3: 310.3, data_date: '2017-07-30',
       ndwi: 0.31, ndwi_source: 'sentinel-2', ndwi_threshold_high: 0.45, ndwi_threshold_low: 0.18,
       alert_level: 'STABLE',
@@ -98,7 +98,7 @@ const DEMO_RESPONSE = {
     {
       // 🟡 WATER_REGIME — Ст. Кладенец is critically low after a dry summer
       id: 'studen-kladenets', name: 'Язовир Студен Кладенец', river: 'Арда',
-      lat: 41.6122, lon: 25.6406, capacity_mln_m3: 387.772,
+      lat: 41.6122, lon: 25.6405, capacity_mln_m3: 387.772,
       fill_pct: 18.7, volume_mln_m3: 72.5, data_date: '2017-09-15',
       ndwi: 0.09, ndwi_source: 'sentinel-2', ndwi_threshold_high: 0.44, ndwi_threshold_low: 0.19,
       alert_level: 'WATER_REGIME',
@@ -109,7 +109,7 @@ const DEMO_RESPONSE = {
     {
       // 🚨 OPEN_GATES — Ивайловград at 93% after heavy spring snowmelt
       id: 'ivaylovgrad', name: 'Язовир Ивайловград', river: 'Арда',
-      lat: 41.5839, lon: 26.1076, capacity_mln_m3: 156.702,
+      lat: 41.5839, lon: 26.1071, capacity_mln_m3: 156.702,
       fill_pct: 93.2, volume_mln_m3: 146.1, data_date: '2017-04-18',
       ndwi: 0.54, ndwi_source: 'sentinel-2', ndwi_threshold_high: 0.46, ndwi_threshold_low: 0.21,
       alert_level: 'OPEN_GATES',
@@ -488,7 +488,7 @@ export default function Dams() {
           <Map
             ref={mapRef}
             mapboxAccessToken={MAPBOX_TOKEN}
-            initialViewState={{ longitude: 25.8, latitude: 41.6, zoom: 9.5 }}
+            initialViewState={{ longitude: 25.70, latitude: 41.61, zoom: 9.0 }}
             style={{ width: '100%', height: '100%' }}
             mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
             fog={{ color: '#0a0a0a', 'high-color': '#000', 'horizon-blend': 0.02 }}
