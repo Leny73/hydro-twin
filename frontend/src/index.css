@@ -48,3 +48,38 @@ body,
 .mapboxgl-ctrl button.mapboxgl-ctrl-compass  .mapboxgl-ctrl-icon {
   filter: invert(0.8);
 }
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────────
+   Thin dark scrollbars with a cyan hover accent matching the operational
+   theme, applied globally to every scroll container in the app. */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(71, 85, 105, 0.6) transparent; /* slate-600 / track */
+}
+
+/* WebKit / Blink */
+*::-webkit-scrollbar {
+  width:  8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(71, 85, 105, 0.55); /* slate-600 @ 55% */
+  border-radius:    8px;
+  border:           2px solid transparent;
+  background-clip:  padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(103, 232, 249, 0.55); /* cyan-300 @ 55% */
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
