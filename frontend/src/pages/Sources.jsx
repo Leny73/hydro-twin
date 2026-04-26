@@ -99,6 +99,14 @@ const SOURCES = [
     cadence: 'Annual updates',
     href:    'https://ec.europa.eu/eurostat/web/main/home',
   },
+  {
+    icon:    '💧',
+    name:    'ISME-HYDRO',
+    family:  'Water Resources Management Platform · Mozaika',
+    what:    'Comprehensive dam and river monitoring system combining in-situ measurements, satellite data, and deep learning. Official platform of the Bulgarian Executive Agency for Exploitation and Monitoring of the Danube River — issues flood and drought advance warnings for the Danube basin.',
+    cadence: 'Real-time in-situ + satellite feeds',
+    href:    'https://isme-hydro.com/',
+  },
 ];
 
 export default function Sources() {
