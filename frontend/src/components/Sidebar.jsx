@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../../logo.jpg';
+import { Droplets } from 'lucide-react';
 import {
   HomeIcon,
   BellAlertIcon,
@@ -23,10 +24,10 @@ import {
  */
 
 const NAV_LINKS = [
-  { to: '/',           end: true,  icon: '🏠', label: 'Overview'  },
-  { to: '/incidents',              icon: '🚨', label: 'Incidents' },
-  { to: '/dams',                   icon: '💧', label: 'Dams'      },
-  { to: '/sources',                icon: '📚', label: 'Sources'   },
+  { to: '/',          end: true, Icon: HomeIcon,      iconColor: 'text-cyan-400',   label: 'Overview'  },
+  { to: '/incidents',            Icon: BellAlertIcon, iconColor: 'text-rose-400',   label: 'Incidents' },
+  { to: '/dams',                 Icon: Droplets,      iconColor: 'text-blue-400',   label: 'Dams'      },
+  { to: '/sources',              Icon: BookOpenIcon,  iconColor: 'text-violet-400', label: 'Sources'   },
 ];
 
 function navClass({ isActive }) {
