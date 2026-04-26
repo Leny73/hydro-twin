@@ -109,7 +109,7 @@ export default function AlertChat({ region, assessment, onClose }) {
         <span className="text-base" aria-hidden="true">💬</span>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] uppercase tracking-widest text-cyan-400 font-semibold">
-            Ask HydroSentry
+            Ask HydroAgent
           </p>
           {isOverlay && region?.name && (
             <p className="text-[11px] text-gray-400 truncate mt-0.5">{region.name}</p>
@@ -182,7 +182,7 @@ export default function AlertChat({ region, assessment, onClose }) {
           onKeyDown={handleKeyDown}
           disabled={loading}
           placeholder="Ask about this alert…"
-          aria-label="Ask HydroSentry a question"
+          aria-label="Ask HydroAgent a question"
           className="flex-1 min-h-[40px] px-3 py-2 rounded-lg text-xs
                      bg-gray-800 border border-gray-700 text-white
                      placeholder-gray-500

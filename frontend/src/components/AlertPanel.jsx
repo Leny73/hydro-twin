@@ -249,7 +249,7 @@ export default function AlertPanel({
                            text-cyan-400 hover:text-cyan-200 transition-all duration-150
                            cursor-pointer"
                 aria-label="Open AI chat assistant"
-                title="Ask HydroSentry"
+                title="Ask HydroAgent"
               >
                 💬
               </button>
