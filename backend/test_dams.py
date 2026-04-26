@@ -1,5 +1,5 @@
-import sys, json
-sys.path.insert(0, '/mnt/c/Users/lyube/Desktop/projects/hydro-twin/backend')
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dams_handler import _load_all_xls, _compute_thresholds, get_dam_statuses
 
 series = _load_all_xls()

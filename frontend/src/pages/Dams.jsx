@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
+import { Droplets } from 'lucide-react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useDashboardContext } from '../components/Layout';
 
@@ -378,10 +379,10 @@ function DamMarker({ dam, isActive, onClick }) {
           )}
           {/* Marker circle */}
           <div
-            className="w-8 h-8 rounded-full border-2 border-white/80 shadow-lg flex items-center justify-center text-base"
+            className="w-8 h-8 rounded-full border-2 border-white/80 shadow-lg flex items-center justify-center"
             style={{ backgroundColor: meta.color }}
           >
-            💧
+            <Droplets className="w-4 h-4 text-white" aria-hidden="true" />
           </div>
           {/* Fill label bubble */}
           {dam.fill_pct != null && (

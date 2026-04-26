@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import logoUrl from '../../logo.jpg';
 import { Droplets } from 'lucide-react';
+import logoUrl from '../../logo.jpg';
 import {
   HomeIcon,
   BellAlertIcon,
