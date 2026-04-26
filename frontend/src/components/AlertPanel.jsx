@@ -16,7 +16,8 @@ import AlertChat          from './AlertChat';
  *   1. Header (sticky)  — region name + status tag + close
  *   2. Replay banner    — only when in replay mode (compact)
  *   3. Current status   — colored badge with icon (top of fold)
- *   4. Subscribe CTA    — hidden in replay mode
+ *   4. Data sources     — what powered THIS assessment
+ *   5. Subscribe CTA    — hidden in replay mode
  *   6. AI Reasoning     — structured (4 sections) or markdown blob
  *   7a. Precipitation   — 14-day OpenMeteo history chart
  *   7b. Forecast        — next 7 days outlook (precip + temp), live-only
@@ -324,7 +325,10 @@ export default function AlertPanel({
             </div>
           </div>
 
-          {/* 4. Subscribe CTA — hidden in replay mode */}
+          {/* 4. Data sources — what actually powered THIS assessment */}
+          <AssessmentSources sources={assessment?.sources} isReplay={isReplay} />
+
+          {/* 5. Subscribe CTA — hidden in replay mode */}
           {!isReplay && (!formOpen ? (
             <button
               onClick={() => { setToast(null); setFormOpen(true); }}
@@ -585,6 +589,62 @@ function Section({ icon, label, content }) {
   );
 }
 
+
+// ── Data sources block ───────────────────────────────────────────────────────
+// Shows what powered THIS assessment in the same visual language as the
+// footer DataSourcesBar, but compact enough to live inside the panel. Curated
+// 3-chip list so it stays readable at panel width; the raw `sources` array
+// from the API (e.g. "Sentinel Hub Statistical API + OpenMeteo") is shown as
+// a small monospace caption underneath for transparency.
+
+const ASSESSMENT_SOURCES = [
+  { icon: '🛰️', name: 'Sentinel-2',  sub: 'NDVI · NDWI · vegetation' },
+  { icon: '📡',  name: 'Sentinel-1',  sub: 'SAR soil moisture'        },
+  { icon: '🌧️', name: 'OpenMeteo',   sub: 'Precipitation · ERA5'     },
+];
+
+function AssessmentSources({ sources, isReplay }) {
+  const raw = Array.isArray(sources) ? sources.filter(Boolean).join(' · ') : '';
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] uppercase tracking-widest text-gray-400">
+          Data Sources
+        </p>
+        {isReplay && (
+          <span className="text-[9px] uppercase tracking-widest text-purple-300">
+            Archive
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {ASSESSMENT_SOURCES.map(s => (
+          <div
+            key={s.name}
+            className="flex flex-col items-center text-center gap-0.5
+                       px-1.5 py-1.5 rounded-md bg-gray-800/50 border border-gray-700/50"
+          >
+            <span className="text-base leading-none" aria-hidden="true">{s.icon}</span>
+            <span className="text-[10px] font-semibold text-gray-200 leading-tight">
+              {s.name}
+            </span>
+            <span className="text-[9px] text-gray-500 leading-tight">
+              {s.sub}
+            </span>
+          </div>
+        ))}
+      </div>
+      {raw && (
+        <p
+          className="mt-2 text-[9px] text-gray-500 leading-relaxed font-mono break-words"
+          title={raw}
+        >
+          {raw}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function CollapsibleSection({ title, isOpen, onToggle, children }) {
   return (
