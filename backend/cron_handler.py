@@ -44,20 +44,24 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.conditions import Attr
 
+import notifications
 from lambda_handler import assess_region, trigger_webhook
-from regions import ALL_REGIONS, REGIONS
+from regions import ALL_REGIONS, REGIONS, REGION_NAMES
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-STATUS_TABLE = os.environ.get("STATUS_TABLE", "HydroTwinStatus")
-AWS_REGION   = os.environ.get("AWS_REGION", "us-east-1")
+STATUS_TABLE        = os.environ.get("STATUS_TABLE",        "HydroTwinStatus")
+SUBSCRIPTIONS_TABLE = os.environ.get("SUBSCRIPTIONS_TABLE", "HydroTwinSubscriptions")
+AWS_REGION          = os.environ.get("AWS_REGION",          "us-east-1")
 
-# Lazy DynamoDB client — instantiated on first invocation, reused warm.
-_TABLE = None
+# Lazy DynamoDB clients — instantiated on first invocation, reused warm.
+_TABLE      = None
+_SUBS_TABLE = None
 
 
 def _get_table():
@@ -65,6 +69,94 @@ def _get_table():
     if _TABLE is None:
         _TABLE = boto3.resource("dynamodb", region_name=AWS_REGION).Table(STATUS_TABLE)
     return _TABLE
+
+
+def _get_subs_table():
+    global _SUBS_TABLE
+    if _SUBS_TABLE is None:
+        _SUBS_TABLE = boto3.resource("dynamodb", region_name=AWS_REGION).Table(SUBSCRIPTIONS_TABLE)
+    return _SUBS_TABLE
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SUBSCRIBER FAN-OUT — email + per-user Discord on transitions
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fetch_subscribers_for(region_id: str) -> list[dict]:
+    """
+    Pull all subscriptions for a single region. Uses Scan + FilterExpression
+    because the table's primary key is (email, region_id) — there's no GSI on
+    region_id yet. At hackathon scale (tens to low hundreds of subscribers)
+    this is fine; revisit with a GSI on `region_id` if it grows past ~1k rows.
+    """
+    try:
+        subs   = []
+        kwargs = {"FilterExpression": Attr("region_id").eq(region_id)}
+        while True:
+            resp = _get_subs_table().scan(**kwargs)
+            subs.extend(resp.get("Items", []))
+            if "LastEvaluatedKey" not in resp:
+                break
+            kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        return subs
+    except Exception as exc:
+        logger.error("Could not fetch subscribers for %s: %s", region_id, exc)
+        return []
+
+
+def _notify_subscribers(*, region_id: str, region_name: str,
+                        new_status: str, prior_status: str | None,
+                        confidence: float, reasoning: str) -> dict:
+    """
+    Fan out a transition notification to every subscriber of `region_id`. Each
+    channel call is wrapped — a single dead Discord webhook can't take down
+    the rest of the email batch.
+    """
+    subs    = _fetch_subscribers_for(region_id)
+    counts  = {"emails_sent": 0, "discord_sent": 0, "subscribers": len(subs)}
+
+    for sub in subs:
+        email   = sub.get("email")
+        webhook = sub.get("discord_webhook")
+
+        if email:
+            subject, html = notifications.render_alert_email(
+                region_name     = region_name,
+                region_id       = region_id,
+                status          = new_status,
+                prior_status    = prior_status,
+                confidence      = float(confidence or 0),
+                reasoning       = reasoning or "",
+                recipient_email = email,
+            )
+            text = notifications.render_email_text_fallback(
+                region_name = region_name,
+                status      = new_status,
+                reasoning   = reasoning or "",
+                region_id   = region_id,
+            )
+            if notifications.send_email(email, subject, html, text):
+                counts["emails_sent"] += 1
+
+        if webhook:
+            if notifications.send_discord_to_webhook(
+                webhook,
+                region_name = region_name,
+                region_id   = region_id,
+                status      = new_status,
+                confidence  = float(confidence or 0),
+                reasoning   = reasoning or "",
+                kind        = "alert",
+            ):
+                counts["discord_sent"] += 1
+
+    if subs:
+        logger.info(
+            "Fan-out for %s (%s): %d emails, %d discord (of %d subscribers)",
+            region_id, new_status,
+            counts["emails_sent"], counts["discord_sent"], counts["subscribers"],
+        )
+    return counts
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +243,8 @@ def lambda_handler(event: dict, context) -> dict:
         "oblasts_processed":        0,
         "municipalities_processed": 0,
         "webhooks_fired":           0,
+        "subscriber_emails_sent":   0,
+        "subscriber_discord_sent":  0,
         "transitions":              [],
         "errors":                   [],
     }
@@ -182,6 +276,23 @@ def lambda_handler(event: dict, context) -> dict:
                     "from":      prior_status,
                     "to":        new_status,
                 })
+
+                # Fan out to per-region subscribers (email + per-user Discord).
+                # Wrapped so a notifications crash never kills the cron run.
+                try:
+                    region_name = REGION_NAMES.get(region_id, region_id)
+                    counts = _notify_subscribers(
+                        region_id    = region_id,
+                        region_name  = region_name,
+                        new_status   = new_status,
+                        prior_status = prior_status,
+                        confidence   = assessment.get("confidence", 0),
+                        reasoning    = assessment.get("reasoning", ""),
+                    )
+                    summary["subscriber_emails_sent"]  += counts["emails_sent"]
+                    summary["subscriber_discord_sent"] += counts["discord_sent"]
+                except Exception as exc:
+                    logger.error("Subscriber fan-out failed for %s: %s", region_id, exc)
             else:
                 logger.info(
                     "No webhook for %s (status=%s, oblast=%s).",

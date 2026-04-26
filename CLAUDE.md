@@ -54,12 +54,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - ❌ **`sentinel_extractor.py` is a STUB** — returns hardcoded dummy dict. Owned by Data Analysts. Must be replaced with real Copernicus + OpenMeteo API calls. **Schema must NOT change** (see Integration Contract below)
 - ❌ **`meteorology_rules.md` regional baselines (Section 5)** — placeholder values, owned by Meteorologist. WMO 1991–2020 normals required before go-live
-- ❌ **No AWS deployment yet** — Lambda not created, API Gateway not provisioned, IAM `bedrock:InvokeModel` policy not attached
-- ❌ **Frontend not deployed** — Vercel project not created, no `VITE_MAPBOX_TOKEN` / `VITE_API_ENDPOINT` set
-- ❌ **No `/subscribe` endpoint** — `AlertPanel` subscribe button is a `window.alert()` stub. Needs Lambda + DynamoDB
 - ❌ **No tests** — `data_science/notebooks/` is empty, no `backend/tests/`
 - ❌ **No data-freshness guard** in extractor — must reject observations > 24 h old
-- ❌ **Discord webhook not wired** — `WEBHOOK_URL` in `.env.example` is a placeholder
+- ❌ **SMS delivery** — UI accepts a phone number but `notifications.send_sms()` is a demo-mode stub until AWS SNS sandbox approval (set `SMS_ENABLED=1` to flip)
+- ❌ **Per-user Telegram** — needs bot DM UX before chat_id can be captured
+
+### Subscribe pipeline (NEW · 2026-04-26)
+
+- ✅ **Multi-channel `/subscribe` Lambda** — accepts `email` (required), `discord_webhook` (optional, validated), `phone` + `telegram_chat` (stored, not delivered yet). Stores in DynamoDB `HydroTwinSubscriptions` with PK=email + SK=region_id
+- ✅ **Brevo welcome email** — fires on successful subscribe with current region status + deep link + HMAC-signed unsubscribe link. Falls through to demo-mode if `BREVO_API_KEY` unset
+- ✅ **Per-user Discord welcome embed** — if subscriber provided a webhook URL, immediately POSTs a "you're subscribed" embed there too
+- ✅ **Cron fan-out on transitions** — `cron_handler` queries subscribers for the transitioning oblast and sends each one an alert email + Discord embed. Bills only on transitions (not every 30-min cron run)
+- ✅ **`/unsubscribe` Lambda + frontend page** — one-click HMAC-token-signed unsubscribe links in every email, lands on themed `/unsubscribe` page that POSTs to the API
+- ✅ **Region URL deep-linking** — clicking a region updates `?region=<id>` in the URL; `/?region=burgas` opens that panel directly. Used by email links
 
 ### 🔒 Stack is locked — do NOT propose re-scaffolding
 

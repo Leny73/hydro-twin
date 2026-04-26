@@ -29,8 +29,9 @@ import Layout    from './components/Layout';
 import Overview  from './pages/Overview';
 import Incidents from './pages/Incidents';
 import Sources   from './pages/Sources';
-import Submit    from './pages/Submit';
-import NotFound  from './pages/NotFound';
+import Submit      from './pages/Submit';
+import Unsubscribe from './pages/Unsubscribe';
+import NotFound    from './pages/NotFound';
 
 export default function App() {
   return (
@@ -41,8 +42,9 @@ export default function App() {
           <Route path="/incidents" element={<Incidents />} />
           <Route path="/sources"   element={<Sources />}   />
         </Route>
-        <Route path="/submit" element={<Submit />} />
-        <Route path="*"       element={<NotFound />} />
+        <Route path="/submit"      element={<Submit />}      />
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
+        <Route path="*"            element={<NotFound />}    />
       </Routes>
     </BrowserRouter>
   );

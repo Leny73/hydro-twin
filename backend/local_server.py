@@ -41,12 +41,13 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.local"),  
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.example"), override=False)
 
 # Import the Lambda handlers — they work identically outside of Lambda
-from lambda_handler    import lambda_handler as assess_handler
-from subscribe_handler import lambda_handler as subscribe_handler
-from status_handler    import lambda_handler as status_handler
-from cron_handler      import lambda_handler as cron_handler
-from reports_handler   import lambda_handler as reports_handler
-from chat_handler      import lambda_handler as chat_handler
+from lambda_handler      import lambda_handler as assess_handler
+from subscribe_handler   import lambda_handler as subscribe_handler
+from unsubscribe_handler import lambda_handler as unsubscribe_handler
+from status_handler      import lambda_handler as status_handler
+from cron_handler        import lambda_handler as cron_handler
+from reports_handler     import lambda_handler as reports_handler
+from chat_handler        import lambda_handler as chat_handler
 
 app = Flask(__name__)
 
@@ -77,10 +78,33 @@ def assess():
 
 @app.route("/subscribe", methods=["POST", "OPTIONS"])
 def subscribe():
-    """POST /subscribe  with JSON body  { "email": "...", "region_id": "..." }"""
+    """POST /subscribe  — multi-channel subscription (email + optional discord)."""
     if request.method == "OPTIONS":
         return "", 204
     return _invoke_lambda(subscribe_handler)
+
+
+@app.route("/unsubscribe", methods=["GET", "POST", "OPTIONS"])
+def unsubscribe():
+    """
+    GET/POST /unsubscribe — one-click unsubscribe via signed token.
+    GET hits this directly from the email link; POST is used by the
+    confirmation page on the frontend.
+    """
+    if request.method == "OPTIONS":
+        return "", 204
+    # The lambda reads queryStringParameters for GET — repackage Flask's view.
+    if request.method == "GET":
+        fake_event = {
+            "httpMethod":            "GET",
+            "queryStringParameters": dict(request.args),
+            "headers":               dict(request.headers),
+        }
+        result          = unsubscribe_handler(fake_event, context=None)
+        response_body   = json.loads(result.get("body", "{}"))
+        response_status = result.get("statusCode", 200)
+        return jsonify(response_body), response_status
+    return _invoke_lambda(unsubscribe_handler)
 
 
 @app.route("/status", methods=["GET", "OPTIONS"])
@@ -128,6 +152,7 @@ if __name__ == "__main__":
     print(f"  Health check:                   http://localhost:{port}/health")
     print(f"  Assess endpoint:                http://localhost:{port}/assess     (POST)")
     print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe  (POST)")
+    print(f"  Unsubscribe endpoint:           http://localhost:{port}/unsubscribe (GET, POST)")
     print(f"  Status endpoint:                http://localhost:{port}/status     (GET)")
     print(f"  Reports endpoint:               http://localhost:{port}/reports    (GET, POST)")
     print(f"  Chat assistant:                 http://localhost:{port}/chat-alert (POST)")

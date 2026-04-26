@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 
 /**
- * AlertChat.jsx — HydroSentry Context-Aware Alert Assistant
+ * AlertChat.jsx — HydroAgent Context-Aware Alert Assistant
  * ===========================================================
  *
  * Drop this component anywhere inside AlertPanel. It sends the user's question
@@ -27,7 +27,7 @@ export default function AlertChat({ region, assessment, onClose }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: `Hi — I'm **HydroSentry**. I have access to the live satellite and weather data for **${region?.name ?? 'this region'}**. Ask me anything about this alert.`,
+      text: `Hi — I'm **HydroAgent**. I have access to the live satellite and weather data for **${region?.name ?? 'this region'}**. Ask me anything about this alert.`,
     },
   ]);
   const [input,     setInput]     = useState('');
@@ -39,7 +39,7 @@ export default function AlertChat({ region, assessment, onClose }) {
   useEffect(() => {
     setMessages([{
       role: 'assistant',
-      text: `Hi — I'm **HydroSentry**. I have access to the live satellite and weather data for **${region?.name ?? 'this region'}**. Ask me anything about this alert.`,
+      text: `Hi — I'm **HydroAgent**. I have access to the live satellite and weather data for **${region?.name ?? 'this region'}**. Ask me anything about this alert.`,
     }]);
     setInput('');
     setLoading(false);
@@ -81,7 +81,7 @@ export default function AlertChat({ region, assessment, onClose }) {
       console.warn('[AlertChat] fetch failed:', err.message);
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', text: '_HydroSentry is temporarily offline. Please retry in a moment._', isError: true },
+        { role: 'assistant', text: '_HydroAgent is temporarily offline. Please retry in a moment._', isError: true },
       ]);
     } finally {
       setLoading(false);
@@ -145,7 +145,7 @@ export default function AlertChat({ region, assessment, onClose }) {
             <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:0ms]" />
             <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:150ms]" />
             <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce [animation-delay:300ms]" />
-            <span className="ml-1">HydroSentry is analyzing…</span>
+            <span className="ml-1">HydroAgent is analyzing…</span>
           </div>
         )}
         <div ref={bottomRef} />
