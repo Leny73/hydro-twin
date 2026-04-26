@@ -16,8 +16,7 @@ import AlertChat          from './AlertChat';
  *   1. Header (sticky)  — region name + status tag + close
  *   2. Replay banner    — only when in replay mode (compact)
  *   3. Current status   — colored badge with icon (top of fold)
- *   4. AI Confidence    — labelled progress bar
- *   5. Subscribe CTA    — hidden in replay mode
+ *   4. Subscribe CTA    — hidden in replay mode
  *   6. AI Reasoning     — structured (4 sections) or markdown blob
  *   7a. Precipitation   — 14-day OpenMeteo history chart
  *   7b. Forecast        — next 7 days outlook (precip + temp), live-only
@@ -64,12 +63,6 @@ const SECTIONS = [
   { key: 'current_context', icon: '🌱', label: 'Current context'   },
   { key: 'next_step',       icon: '📋', label: 'Suggested next step' },
 ];
-
-function confidenceColor(pct) {
-  if (pct > 70) return '#EF4444';
-  if (pct > 40) return '#F59E0B';
-  return '#10B981';
-}
 
 function tagColor(tag) {
   switch (tag) {
@@ -121,7 +114,6 @@ export default function AlertPanel({
   if (!region && !isLoading) return null;
 
   const meta       = STATUS_META[assessment?.status] ?? DEFAULT_META;
-  const pct        = assessment ? Math.round((assessment.confidence ?? 0) * 100) : 0;
   const isAlert    = ['DROUGHT_WARNING', 'FLOOD_WARNING'].includes(assessment?.status);
   const replayKind = assessment?.replay_kind ?? null;
   const isCurated  = replayKind === 'curated';
@@ -332,10 +324,7 @@ export default function AlertPanel({
             </div>
           </div>
 
-          {/* 4. AI confidence — labelled progress bar */}
-          <ConfidenceBar pct={pct} />
-
-          {/* 5. Subscribe CTA — hidden in replay mode */}
+          {/* 4. Subscribe CTA — hidden in replay mode */}
           {!isReplay && (!formOpen ? (
             <button
               onClick={() => { setToast(null); setFormOpen(true); }}
@@ -596,30 +585,6 @@ function Section({ icon, label, content }) {
   );
 }
 
-function ConfidenceBar({ pct }) {
-  const color = confidenceColor(pct);
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-        <span>AI Confidence</span>
-        <span className="font-bold" style={{ color }}>{pct}%</span>
-      </div>
-      <div
-        role="progressbar"
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label="AI confidence"
-        className="w-full h-1.5 rounded-full bg-gray-800 overflow-hidden"
-      >
-        <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
-      </div>
-    </div>
-  );
-}
 
 function CollapsibleSection({ title, isOpen, onToggle, children }) {
   return (
