@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { listReports } from '../lib/reports-api';
+import { listIncidents } from '../lib/incidents-api';
 
 /**
- * ReportsList.jsx — public list of submitted incident reports
- * ==============================================================
+ * IncidentsList.jsx — municipality view of citizen-submitted incidents
+ * =======================================================================
  *
- * BF2-2 changes:
- *   - Pill-chip region filter (All / Pleven / Yambol / Burgas / Other) with
- *     per-chip counts
- *   - Each card shows both relative time AND absolute date/time
- *   - Metadata row wraps so coordinates can't escape the card on narrow
- *     viewports
+ * Pill-chip region filter (All / Pleven / Yambol / Burgas / Other) with
+ * per-chip counts. Each card shows both relative time AND absolute
+ * date/time. Metadata row wraps so coordinates can't escape the card on
+ * narrow viewports.
  *
- * Refreshes on mount + when ReportForm fires `hydrotwin:reports:changed`.
+ * Refreshes on mount + when an IncidentForm fires
+ * `hydrotwin:incidents:changed` (cross-tab updates aren't covered, but
+ * a manual reload will pick them up).
+ *
  * On fetch failure: empty list + small error caption (no fake demo data).
  */
 
@@ -60,22 +61,23 @@ function absolute(iso) {
   });
 }
 
-export default function ReportsList() {
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
-  const [filter,  setFilter]  = useState('ALL');
+export default function IncidentsList() {
+  const [incidents, setIncidents] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState(null);
+  const [filter,    setFilter]    = useState('ALL');
 
   const refresh = async () => {
     setLoading(true);
     try {
-      const data = await listReports();
-      setReports(Array.isArray(data?.reports) ? data.reports : []);
+      const data = await listIncidents();
+      // Backend still returns `{ reports: [...] }` — don't break on rename.
+      setIncidents(Array.isArray(data?.reports) ? data.reports : []);
       setError(null);
     } catch (err) {
       console.warn('[HydroTwin] /reports list fetch failed:', err.message);
-      setReports([]);
-      setError('Could not load reports — please try again later.');
+      setIncidents([]);
+      setError('Could not load incidents — please try again later.');
     } finally {
       setLoading(false);
     }
@@ -84,33 +86,32 @@ export default function ReportsList() {
   useEffect(() => {
     refresh();
     const onChange = () => refresh();
-    window.addEventListener('hydrotwin:reports:changed', onChange);
-    return () => window.removeEventListener('hydrotwin:reports:changed', onChange);
+    window.addEventListener('hydrotwin:incidents:changed', onChange);
+    return () => window.removeEventListener('hydrotwin:incidents:changed', onChange);
   }, []);
 
-  // Per-region counts for the chip badges
   const counts = useMemo(() => {
-    const out = { ALL: reports.length };
-    for (const r of reports) {
+    const out = { ALL: incidents.length };
+    for (const r of incidents) {
       const k = r.region_id ?? 'other';
       out[k] = (out[k] ?? 0) + 1;
     }
     return out;
-  }, [reports]);
+  }, [incidents]);
 
   const visible = useMemo(() => {
-    if (filter === 'ALL') return reports;
-    return reports.filter(r => (r.region_id ?? 'other') === filter);
-  }, [reports, filter]);
+    if (filter === 'ALL') return incidents;
+    return incidents.filter(r => (r.region_id ?? 'other') === filter);
+  }, [incidents, filter]);
 
   const filterRegionLabel = filter === 'ALL' ? null : REGION_LABELS[filter] ?? filter;
 
   return (
     <section className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
       <header className="mb-4 flex items-center gap-3 flex-wrap">
-        <h2 className="text-base font-bold text-white">Recent reports</h2>
+        <h2 className="text-base font-bold text-white">Incoming incidents</h2>
         <span className="ml-auto text-[10px] text-gray-500">
-          {loading ? 'Loading…' : `${visible.length} of ${reports.length}`}
+          {loading ? 'Loading…' : `${visible.length} of ${incidents.length}`}
         </span>
       </header>
 
@@ -118,7 +119,7 @@ export default function ReportsList() {
       <div
         className="flex flex-wrap gap-2 mb-4"
         role="tablist"
-        aria-label="Filter reports by region"
+        aria-label="Filter incidents by region"
       >
         {REGION_OPTIONS.map(opt => {
           const active = filter === opt.value;
@@ -160,9 +161,9 @@ export default function ReportsList() {
 
       {!loading && !error && visible.length === 0 && (
         <p className="text-xs text-gray-500 italic text-center py-6">
-          {reports.length === 0
-            ? 'No reports yet — be the first to submit one above.'
-            : `No reports for ${filterRegionLabel} yet.`}
+          {incidents.length === 0
+            ? 'No incidents reported yet.'
+            : `No incidents for ${filterRegionLabel} yet.`}
         </p>
       )}
 
