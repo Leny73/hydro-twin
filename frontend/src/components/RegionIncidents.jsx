@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { listReports } from '../lib/reports-api';
+import { listIncidents } from '../lib/incidents-api';
 
 /**
- * RegionReports.jsx — recent citizen reports for the active region
- * ===================================================================
+ * RegionIncidents.jsx — recent citizen incidents for the active region
+ * =======================================================================
  *
  * Decision-support angle: pairs the satellite/Bedrock assessment with
- * ground-truth observations submitted via /reports. The full list lives
- * on /reports — this is the in-panel preview (last 3) so a mayor sees
- * "what people on the ground are saying about THIS oblast" without
- * leaving the alert panel.
+ * ground-truth observations submitted via the citizen /submit page.
+ * The full list lives on /incidents — this is the in-panel preview
+ * (last 3) so a mayor sees "what people on the ground are saying about
+ * THIS oblast" without leaving the alert panel.
  *
- * Refreshes on mount + on the `hydrotwin:reports:changed` event fired
- * by ReportForm (so the panel stays current after a submission).
+ * Refreshes on mount + on the `hydrotwin:incidents:changed` event fired
+ * by IncidentForm (so the panel stays current after a submission in the
+ * same browser context).
  */
 
 const LIMIT = 3;
@@ -37,58 +38,59 @@ function relative(iso) {
   return `${d} d ago`;
 }
 
-export default function RegionReports({ region }) {
-  const [reports, setReports] = useState(null);
-  const [error,   setError]   = useState(null);
+export default function RegionIncidents({ region }) {
+  const [incidents, setIncidents] = useState(null);
+  const [error,     setError]     = useState(null);
 
   const refresh = async () => {
     try {
-      const data = await listReports();
-      setReports(Array.isArray(data?.reports) ? data.reports : []);
+      const data = await listIncidents();
+      // Backend still returns `{ reports: [...] }`.
+      setIncidents(Array.isArray(data?.reports) ? data.reports : []);
       setError(null);
     } catch (err) {
-      console.warn('[HydroTwin] region reports fetch failed:', err.message);
-      setReports([]);
-      setError('Could not load citizen reports.');
+      console.warn('[HydroTwin] region incidents fetch failed:', err.message);
+      setIncidents([]);
+      setError('Could not load citizen incidents.');
     }
   };
 
   useEffect(() => {
     refresh();
     const onChange = () => refresh();
-    window.addEventListener('hydrotwin:reports:changed', onChange);
-    return () => window.removeEventListener('hydrotwin:reports:changed', onChange);
+    window.addEventListener('hydrotwin:incidents:changed', onChange);
+    return () => window.removeEventListener('hydrotwin:incidents:changed', onChange);
   }, []);
 
   const matching = useMemo(() => {
-    if (!Array.isArray(reports) || !region?.id) return [];
-    return reports
+    if (!Array.isArray(incidents) || !region?.id) return [];
+    return incidents
       .filter(r => r.region_id === region.id)
       .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
       .slice(0, LIMIT);
-  }, [reports, region?.id]);
+  }, [incidents, region?.id]);
 
   const totalForRegion = useMemo(() => {
-    if (!Array.isArray(reports) || !region?.id) return 0;
-    return reports.filter(r => r.region_id === region.id).length;
-  }, [reports, region?.id]);
+    if (!Array.isArray(incidents) || !region?.id) return 0;
+    return incidents.filter(r => r.region_id === region.id).length;
+  }, [incidents, region?.id]);
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 mb-1.5">
         <p className="text-[10px] uppercase tracking-widest text-gray-400">
-          Citizen reports · this oblast
+          Citizen incidents · this oblast
         </p>
         <Link
-          to="/reports"
+          to="/incidents"
           className="text-[10px] text-cyan-400 hover:text-cyan-300 underline whitespace-nowrap"
         >
-          all reports ↗
+          all incidents ↗
         </Link>
       </div>
 
       <div className="bg-gray-800/60 border border-gray-700/60 rounded-lg">
-        {reports == null && !error && <Skeleton />}
+        {incidents == null && !error && <Skeleton />}
 
         {error && (
           <div className="px-3 py-3 text-[10px] text-yellow-500 leading-relaxed text-center">
@@ -96,17 +98,11 @@ export default function RegionReports({ region }) {
           </div>
         )}
 
-        {reports != null && !error && matching.length === 0 && (
+        {incidents != null && !error && matching.length === 0 && (
           <div className="px-3 py-4 text-center">
-            <p className="text-[11px] text-gray-400 mb-1">
-              No reports for {region?.name ?? 'this region'} yet.
+            <p className="text-[11px] text-gray-400">
+              No incidents reported for {region?.name ?? 'this region'} yet.
             </p>
-            <Link
-              to="/reports"
-              className="text-[10px] text-cyan-400 hover:text-cyan-300 underline"
-            >
-              Submit the first one →
-            </Link>
           </div>
         )}
 
@@ -129,7 +125,7 @@ export default function RegionReports({ region }) {
             {totalForRegion > LIMIT && (
               <li className="px-3 py-2 text-center">
                 <Link
-                  to="/reports"
+                  to="/incidents"
                   className="text-[10px] text-cyan-400 hover:text-cyan-300 underline"
                 >
                   +{totalForRegion - LIMIT} more for {region?.name ?? 'this region'} →
@@ -147,7 +143,7 @@ function Skeleton() {
   return (
     <div className="h-20 flex items-center justify-center" aria-busy="true">
       <span className="text-[10px] text-gray-500 tracking-widest uppercase animate-pulse">
-        Loading reports…
+        Loading incidents…
       </span>
     </div>
   );

@@ -2,19 +2,21 @@
  * App.jsx — HydroTwin router root
  * ===================================
  *
- * v3 dashboard chrome:
+ * Two surfaces, one bundle:
+ *
  *   <BrowserRouter>
- *     <Layout>          ← sidebar + topbar + bottom data bar
- *       <Routes>
- *         /         → <Overview>  (operational map + AlertPanel + history replay)
- *         /reports  → <Reports>   (citizen incident form + list)
- *       </Routes>
- *     </Layout>
+ *     <Routes>
+ *       <Layout>                 ← municipality dashboard chrome
+ *         /             → <Overview>
+ *         /incidents    → <Incidents>   (read-only triage list)
+ *         /sources      → <Sources>
+ *       </Layout>
+ *       /submit         → <Submit>      ← public citizen surface, no chrome
+ *     </Routes>
  *   </BrowserRouter>
  *
- * Shared snapshot data (regionStatuses, last-updated, demo flag) lives in
- * Layout and reaches pages via useOutletContext(). Pages may set their own
- * topbar title/subtitle via setPageMeta().
+ * The dashboard is for municipalities; citizens go to /submit, and what
+ * they send appears on /incidents inside the dashboard.
  *
  * Environment variables required (.env.local):
  *   VITE_MAPBOX_TOKEN  – Mapbox public access token
@@ -25,18 +27,20 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout    from './components/Layout';
 import Overview  from './pages/Overview';
-import Reports   from './pages/Reports';
+import Incidents from './pages/Incidents';
 import Sources   from './pages/Sources';
+import Submit    from './pages/Submit';
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/"        element={<Overview />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/sources" element={<Sources />} />
+          <Route path="/"          element={<Overview />}  />
+          <Route path="/incidents" element={<Incidents />} />
+          <Route path="/sources"   element={<Sources />}   />
         </Route>
+        <Route path="/submit" element={<Submit />} />
       </Routes>
     </BrowserRouter>
   );

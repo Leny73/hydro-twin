@@ -80,6 +80,38 @@ const REGIONS = [
   },
 ];
 
+// ── World mask: dark fill everywhere except Bulgaria ─────────────────────────
+// Polygon with a Web-Mercator-safe outer ring (lat ±85°) and Bulgaria's
+// outer rings as holes, so the basemap stays visible inside Bulgaria and
+// gets dimmed everywhere else.
+const WORLD_RING = [
+  [-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85],
+];
+const BULGARIA_MASK = (() => {
+  const geom = BULGARIA_OUTLINE.features[0].geometry;
+  const holes =
+    geom.type === 'Polygon'
+      ? [geom.coordinates[0]]
+      : geom.coordinates.map((poly) => poly[0]);
+  return {
+    type:     'FeatureCollection',
+    features: [{
+      type:       'Feature',
+      properties: {},
+      geometry:   { type: 'Polygon', coordinates: [WORLD_RING, ...holes] },
+    }],
+  };
+})();
+
+const BG_MASK_LAYER = {
+  id:    'bulgaria-mask',
+  type:  'fill',
+  paint: {
+    'fill-color':   '#0A0F1A',
+    'fill-opacity': 0.70,
+  },
+};
+
 // ── Mapbox layer descriptors ─────────────────────────────────────────────────
 const BG_OUTLINE_LAYER = {
   id:    'bulgaria-outline',
@@ -549,6 +581,10 @@ export default function Overview() {
       >
         <NavigationControl position="bottom-right" />
         <ScaleControl      position="bottom-left"  unit="metric" />
+
+        <Source id="bulgaria-mask" type="geojson" data={BULGARIA_MASK}>
+          <Layer {...BG_MASK_LAYER} />
+        </Source>
 
         <Source id="bulgaria-outline" type="geojson" data={BULGARIA_OUTLINE}>
           <Layer {...BG_OUTLINE_LAYER} />

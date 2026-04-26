@@ -14,9 +14,9 @@ import { NavLink } from 'react-router-dom';
  */
 
 const NAV_LINKS = [
-  { to: '/',         end: true,  icon: '🏠', label: 'Overview' },
-  { to: '/reports',              icon: '📋', label: 'Reports'  },
-  { to: '/sources',              icon: '📚', label: 'Sources'  },
+  { to: '/',           end: true,  icon: '🏠', label: 'Overview'  },
+  { to: '/incidents',              icon: '🚨', label: 'Incidents' },
+  { to: '/sources',                icon: '📚', label: 'Sources'   },
 ];
 
 function navClass({ isActive }) {

@@ -5,8 +5,8 @@ import SeverityCounter from './SeverityCounter';
  * ===============================================================
  *
  * Sits above the main content area. Title comes from the parent route
- * (Overview / Reports / etc). Severity counter is only shown when the
- * caller passes `regionStatuses` — Reports page hides it.
+ * (Overview / Incidents / etc). Severity counter is only shown when the
+ * caller passes `regionStatuses` — Incidents page hides it.
  *
  * Hamburger button is rendered only below `lg` (≥1024 px is desktop,
  * where Sidebar is statically visible). It calls `onMenuClick` to open
@@ -34,11 +34,21 @@ export default function TopBar({ title, subtitle, regionStatuses, onMenuClick })
       )}
 
       <div className="min-w-0 flex-1">
-        <h1 className="text-base sm:text-lg font-bold text-white leading-tight truncate">
+        {/* Mobile: brand wordmark (sidebar isn't visible to carry it).
+            Desktop: page title + subtitle (sidebar already shows the brand). */}
+        <div className="sm:hidden flex items-center gap-1.5">
+          <span className="text-lg leading-none select-none" aria-hidden="true">💧</span>
+          <span className="text-sm font-bold tracking-widest text-cyan-400 uppercase leading-none">
+            HydroTwin
+          </span>
+        </div>
+        <h1 className="hidden sm:block text-base sm:text-lg font-bold text-white leading-tight truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-[11px] text-gray-500 leading-tight truncate">{subtitle}</p>
+          <p className="hidden sm:block text-[11px] text-gray-500 leading-tight truncate">
+            {subtitle}
+          </p>
         )}
       </div>
 

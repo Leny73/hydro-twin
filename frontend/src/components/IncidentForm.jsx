@@ -1,21 +1,19 @@
 import { useState } from 'react';
-import Map, { Marker, NavigationControl } from 'react-map-gl';
+import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { submitReport } from '../lib/reports-api';
+import { submitIncident } from '../lib/incidents-api';
+import BULGARIA_OUTLINE from '../lib/bulgaria-outline';
 
 /**
- * ReportForm.jsx — citizen incident-report submission
- * =====================================================
+ * IncidentForm.jsx — citizen incident submission
+ * =================================================
  *
- * Fields:
- *   - email       (required, RFC-ish format check on the client)
- *   - region      (dropdown: pleven / yambol / burgas / other)
- *   - description (textarea, 10–500 chars)
- *   - location    (mini-map; click to drop / move a pin)
- *
- * On submit: POST /reports with the payload. Success clears the form and
- * shows a toast; the parent ReportsList component re-fetches via a window
- * event so the new report appears at the top.
+ * Used standalone on the public /submit page (citizen-facing surface).
+ * Fields: email · region · description · pinned location.
+ * On success: clears the form, fires `hydrotwin:incidents:changed` so any
+ * listeners (e.g. the municipality dashboard if open in another tab) can
+ * refresh, and surfaces an inline confirmation toast. The optional
+ * `onSubmitted` callback lets a parent swap to a dedicated thank-you view.
  */
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
@@ -34,7 +32,28 @@ const INITIAL_VIEW_STATE = {
   zoom:      6.4,
 };
 
-export default function ReportForm() {
+// Tint Bulgaria green so citizens spot the country at a glance.
+// Surrounding territory keeps the dark-v11 default grey.
+const BG_FILL_LAYER = {
+  id:    'bg-fill',
+  type:  'fill',
+  paint: {
+    'fill-color':   '#10B981',
+    'fill-opacity': 0.22,
+  },
+};
+
+const BG_OUTLINE_LAYER = {
+  id:    'bg-outline',
+  type:  'line',
+  paint: {
+    'line-color':   '#34D399',
+    'line-width':   1.6,
+    'line-opacity': 0.85,
+  },
+};
+
+export default function IncidentForm({ onSubmitted } = {}) {
   const [email,       setEmail]       = useState('');
   const [regionId,    setRegionId]    = useState('');
   const [description, setDescription] = useState('');
@@ -79,22 +98,23 @@ export default function ReportForm() {
     setSubmitting(true);
     setToast(null);
     try {
-      await submitReport({
+      await submitIncident({
         email:       email.trim(),
         region_id:   regionId,
         description: description.trim(),
         lat:         pin.lat,
         lng:         pin.lng,
       });
-      setToast({ kind: 'success', msg: '✅ Report submitted — thank you.' });
+      setToast({ kind: 'success', msg: '✅ Incident submitted — thank you.' });
       reset();
-      // Tell the list to re-fetch
-      window.dispatchEvent(new CustomEvent('hydrotwin:reports:changed'));
+      // Tell any open dashboards to re-fetch
+      window.dispatchEvent(new CustomEvent('hydrotwin:incidents:changed'));
+      if (typeof onSubmitted === 'function') onSubmitted();
       setTimeout(() => {
         setToast(t => (t && t.kind === 'success' ? null : t));
       }, 4000);
     } catch (err) {
-      console.warn('[HydroTwin] Report submit failed:', err.message);
+      console.warn('[HydroTwin] Incident submit failed:', err.message);
       setToast({ kind: 'error', msg: 'Submission failed. Please try again.' });
     } finally {
       setSubmitting(false);
@@ -102,18 +122,10 @@ export default function ReportForm() {
   };
 
   return (
-    <section className="bg-gray-900/60 border border-gray-800 rounded-xl p-5">
-      <header className="mb-4">
-        <h2 className="text-base font-bold text-white">Report an incident</h2>
-        <p className="text-xs text-gray-400 mt-1">
-          Spotted flooding, drought damage, or other water-related issues?
-          Submit a report so authorities can review and respond.
-        </p>
-      </header>
-
-      <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <section className="bg-gray-900/60 border border-gray-800 rounded-xl p-3 sm:p-5">
+      <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {/* ── Left column: text fields ────────────────────────────────── */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2.5">
           <label className="text-[10px] uppercase tracking-widest text-gray-400">
             Email
             <input
@@ -155,7 +167,7 @@ export default function ReportForm() {
             Description
             <textarea
               required
-              rows={5}
+              rows={3}
               minLength={10}
               maxLength={500}
               value={description}
@@ -178,7 +190,7 @@ export default function ReportForm() {
           <p className="text-[10px] uppercase tracking-widest text-gray-400">
             Location {pin ? '· pinned' : '· click the map to drop a pin'}
           </p>
-          <div className="h-[260px] rounded-lg overflow-hidden border border-gray-800">
+          <div className="h-[180px] sm:h-[260px] rounded-lg overflow-hidden border border-gray-800">
             <Map
               mapboxAccessToken={MAPBOX_TOKEN}
               initialViewState={INITIAL_VIEW_STATE}
@@ -186,6 +198,10 @@ export default function ReportForm() {
               mapStyle="mapbox://styles/mapbox/dark-v11"
               onClick={onMapClick}
             >
+              <Source id="bulgaria-outline" type="geojson" data={BULGARIA_OUTLINE}>
+                <Layer {...BG_FILL_LAYER} />
+                <Layer {...BG_OUTLINE_LAYER} />
+              </Source>
               <NavigationControl position="top-right" showCompass={false} />
               {pin && (
                 <Marker longitude={pin.lng} latitude={pin.lat} anchor="bottom">
@@ -223,7 +239,7 @@ export default function ReportForm() {
                        transition-all duration-200 active:scale-95 cursor-pointer
                        disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {submitting ? 'Submitting…' : 'Submit report'}
+            {submitting ? 'Submitting…' : 'Submit incident'}
           </button>
         </div>
       </form>

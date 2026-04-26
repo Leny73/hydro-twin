@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import PrecipitationChart from './PrecipitationChart';
 import ForecastOutlook    from './ForecastOutlook';
 import CycloneChart       from './CycloneChart';
-import RegionReports      from './RegionReports';
+import RegionIncidents    from './RegionIncidents';
 import DatePicker         from './DatePicker';
 import CuratedEventChips  from './CuratedEventChips';
 import AlertChat          from './AlertChat';
@@ -22,7 +22,7 @@ import AlertChat          from './AlertChat';
  *   7a. Precipitation   — 14-day OpenMeteo history chart
  *   7b. Forecast        — next 7 days outlook (precip + temp), live-only
  *   7c. Synoptic field  — ECMWF Z500/T850 chart, live-only
- *   7d. Citizen reports — last 3 reports for THIS oblast, live-only
+ *   7d. Citizen incidents — last 3 incidents for THIS oblast, live-only
  *   8. Replay & past events — collapsible (DatePicker + CuratedEventChips),
  *                             closed by default, auto-opens when in replay
  *   9. Metadata footer  — compact provenance line (data source, timestamp)
@@ -458,8 +458,8 @@ export default function AlertPanel({
                  with a deep-link to the ECMWF Z500/T850 chart */}
           {!isReplay && <CycloneChart region={region} />}
 
-          {/* 7d. Citizen reports for THIS oblast — ground truth pairing */}
-          {!isReplay && <RegionReports region={region} />}
+          {/* 7d. Citizen incidents for THIS oblast — ground truth pairing */}
+          {!isReplay && <RegionIncidents region={region} />}
 
           {/* 9. Replay & past events — collapsible */}
           <CollapsibleSection
