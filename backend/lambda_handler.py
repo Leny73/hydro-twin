@@ -49,6 +49,9 @@ DISCORD_WEBHOOK_URLS = [
 ]
 TELEGRAM_BOT_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
+SUBSCRIPTIONS_TABLE  = os.environ.get("SUBSCRIPTIONS_TABLE", "HydroTwinSubscriptions")
+SES_SENDER_EMAIL     = os.environ.get("SES_SENDER_EMAIL", "")
+UNSUBSCRIBE_BASE_URL = os.environ.get("UNSUBSCRIBE_BASE_URL", "http://localhost:5050")
 BEDROCK_MODEL_ID     = os.environ.get(
     "BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0"
 )
@@ -318,6 +321,155 @@ def _send_telegram(emoji: str, status: str, region: str, conf: int, reason: str)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  EMAIL ALERTER — SES delivery to DynamoDB subscribers
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SUBS_TABLE = None
+
+
+def _get_subs_table():
+    global _SUBS_TABLE
+    if _SUBS_TABLE is None:
+        _SUBS_TABLE = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1")).Table(SUBSCRIPTIONS_TABLE)
+    return _SUBS_TABLE
+
+
+def _build_email_html(status: str, region: str, conf: int, reason: str, email: str, region_id: str) -> str:
+    STATUS_COLORS = {
+        "SAFE":            "#10B981",
+        "DROUGHT_WATCH":   "#F59E0B",
+        "DROUGHT_WARNING": "#F97316",
+        "FLOOD_WATCH":     "#3B82F6",
+        "FLOOD_WARNING":   "#EF4444",
+    }
+    STATUS_EMOJIS = {
+        "SAFE": "✅", "DROUGHT_WATCH": "🟡", "DROUGHT_WARNING": "🔴",
+        "FLOOD_WATCH": "🌊", "FLOOD_WARNING": "🔴",
+    }
+    color   = STATUS_COLORS.get(status, "#94A3B8")
+    emoji   = STATUS_EMOJIS.get(status, "ℹ️")
+    snippet = reason[:600] + ("…" if len(reason) > 600 else "")
+    unsub_url = (
+        f"{UNSUBSCRIBE_BASE_URL}/unsubscribe"
+        f"?email={html.escape(email)}&region_id={html.escape(region_id)}"
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:12px;overflow:hidden;border:1px solid #334155;">
+        <!-- Header -->
+        <tr>
+          <td style="background:{color}18;border-bottom:3px solid {color};padding:24px 32px;">
+            <p style="margin:0;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:{color};font-weight:700;">HydroTwin Alert</p>
+            <h1 style="margin:8px 0 0;font-size:22px;font-weight:800;color:#f8fafc;">{emoji} {region}</h1>
+          </td>
+        </tr>
+        <!-- Status badge -->
+        <tr>
+          <td style="padding:24px 32px 0;">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:{color}22;border:1px solid {color}55;border-radius:8px;padding:10px 18px;">
+                  <span style="font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:{color};">{status}</span>
+                </td>
+                <td style="padding-left:16px;">
+                  <span style="font-size:13px;color:#94a3b8;">AI Confidence: <strong style="color:#f8fafc;">{conf}%</strong></span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Reasoning -->
+        <tr>
+          <td style="padding:20px 32px 0;">
+            <p style="margin:0 0 8px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#64748b;">AI Assessment</p>
+            <p style="margin:0;font-size:14px;line-height:1.7;color:#cbd5e1;">{html.escape(snippet)}</p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:24px 32px;border-top:1px solid #334155;margin-top:24px;">
+            <p style="margin:0;font-size:11px;color:#475569;">
+              Powered by <strong style="color:#94a3b8;">HydroTwin</strong> · Copernicus EO + AWS Bedrock<br>
+              <a href="{unsub_url}" style="color:#64748b;text-decoration:underline;">Unsubscribe from {region} alerts</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+
+def trigger_email_alerts(assessment: dict) -> None:
+    """
+    Send alert emails to all subscribers for the transitioned region via AWS SES.
+
+    Called by cron_handler on status transitions only — never on the click path.
+    Non-fatal: any delivery failure is logged and skipped.
+
+    Env vars:
+      SUBSCRIPTIONS_TABLE  – DynamoDB table with subscriber records
+      SES_SENDER_EMAIL     – verified SES sender address (e.g. alerts@hydrotwin.io)
+      UNSUBSCRIBE_BASE_URL – base URL for unsubscribe links (e.g. https://api.hydrotwin.io)
+    """
+    if not SES_SENDER_EMAIL:
+        logger.warning("SES_SENDER_EMAIL not set — skipping email alerts.")
+        return
+
+    region_id = assessment.get("region_id", "")
+    status    = assessment.get("status", "SAFE")
+    region    = assessment.get("region_id", "Unknown Region")
+    conf      = int(assessment.get("confidence", 0) * 100)
+    reason    = assessment.get("reasoning", "No reasoning provided.")
+
+    # Scan subscriptions table for all subscribers of this region.
+    # NOTE: A DynamoDB GSI on region_id would be more efficient at scale.
+    try:
+        from boto3.dynamodb.conditions import Attr
+        response = _get_subs_table().scan(
+            FilterExpression=Attr("region_id").eq(region_id),
+            ProjectionExpression="email, region_id",
+        )
+        subscribers = response.get("Items", [])
+    except Exception as exc:
+        logger.error("Failed to read subscriptions for %s: %s", region_id, exc)
+        return
+
+    if not subscribers:
+        logger.info("No subscribers for region %s — skipping email.", region_id)
+        return
+
+    ses = boto3.client("ses", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    subject = f"HydroTwin Alert — {status.replace('_', ' ').title()} · {region_id}"
+
+    sent = 0
+    for sub in subscribers:
+        email = sub.get("email", "")
+        if not email:
+            continue
+        try:
+            body_html = _build_email_html(status, region, conf, reason, email, region_id)
+            ses.send_email(
+                Source=SES_SENDER_EMAIL,
+                Destination={"ToAddresses": [email]},
+                Message={
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body":    {"Html": {"Data": body_html, "Charset": "UTF-8"}},
+                },
+            )
+            sent += 1
+        except Exception as exc:
+            logger.error("Failed to send email to %s: %s", email, exc)
+
+    logger.info("Email alerts sent: %d/%d for region %s (%s)", sent, len(subscribers), region_id, status)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  CORE PIPELINE — reusable by cron + API
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -417,12 +569,9 @@ def lambda_handler(event: dict, context) -> dict:
     # ── 2. Run the core pipeline ──────────────────────────────────────────
     assessment = assess_region(region_id, bbox)
 
-    # ── 3. Trigger webhook for non-SAFE statuses (click-path: always fire) ──
-    if assessment.get("status", "SAFE") != "SAFE":
-        logger.info("Non-SAFE status detected (%s) — firing webhook.", assessment["status"])
-        trigger_webhook(assessment)
-
-    # ── 4. Return API Gateway response ────────────────────────────────────
+    # ── 3. Return API Gateway response ────────────────────────────────────
+    # Webhooks (Discord/Telegram) and email alerts fire from cron_handler only,
+    # on status transitions. Firing here on every click caused notification spam.
     logger.info("Assessment complete: %s (confidence: %s)",
                 assessment.get("status"), assessment.get("confidence"))
     return _response(200, assessment)

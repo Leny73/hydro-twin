@@ -76,24 +76,26 @@ def _get_table():
 
 def lambda_handler(event: dict, context) -> dict:
     """
-    AWS Lambda handler — invoked by API Gateway on POST /subscribe.
+    AWS Lambda handler — invoked by API Gateway.
 
-    Expected POST body (JSON):
-    {
-        "email":     "user@example.com",
-        "region_id": "danube-basin"
-    }
+    POST /subscribe
+      Body: { "email": "user@example.com", "region_id": "danube-basin" }
+      201  subscribed | 400  invalid input | 409  already subscribed
 
-    Responses:
-      201  { "message": "subscribed", "email": ..., "region_id": ..., "created_at": ... }
-      400  { "error": "Invalid email" | "Unknown region_id" | "Invalid JSON body" }
-      409  { "error": "Already subscribed", ... }
+    DELETE /subscribe  (or GET /unsubscribe?email=...&region_id=...)
+      Removes the (email, region_id) pair from DynamoDB.
+      200  unsubscribed | 400  invalid input | 404  not found
     """
     logger.info("Event received: %s", json.dumps(event))
 
     # ── Handle CORS preflight ────────────────────────────────────────────
     if event.get("httpMethod") == "OPTIONS":
         return _response(200, {})
+
+    # ── Route DELETE and GET /unsubscribe to the unsubscribe handler ─────
+    method = event.get("httpMethod", "POST")
+    if method == "DELETE" or (method == "GET" and "/unsubscribe" in (event.get("path") or "")):
+        return _handle_unsubscribe(event)
 
     # ── 1. Parse + validate request body ─────────────────────────────────
     try:
@@ -164,6 +166,63 @@ def lambda_handler(event: dict, context) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 #  HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _handle_unsubscribe(event: dict) -> dict:
+    """
+    Remove a subscription. Accepts two request shapes:
+      DELETE /subscribe  — body: { "email": "...", "region_id": "..." }
+      GET    /unsubscribe?email=...&region_id=...  — for email link clicks
+    """
+    method = event.get("httpMethod", "DELETE")
+    if method == "GET":
+        params    = event.get("queryStringParameters") or {}
+        email     = (params.get("email")     or "").strip().lower()
+        region_id = (params.get("region_id") or "").strip()
+    else:
+        try:
+            raw_body = event.get("body", "{}")
+            body     = json.loads(raw_body) if isinstance(raw_body, str) else (raw_body or {})
+        except (json.JSONDecodeError, AttributeError) as exc:
+            return _response(400, {"error": f"Invalid JSON body: {exc}"})
+        email     = (body.get("email")     or "").strip().lower()
+        region_id = (body.get("region_id") or "").strip()
+
+    if not EMAIL_REGEX.match(email):
+        return _response(400, {"error": "Invalid email address"})
+    if not region_id:
+        return _response(400, {"error": "region_id is required"})
+
+    try:
+        _get_table().delete_item(
+            Key={"email": email, "region_id": region_id},
+            ConditionExpression="attribute_exists(email) AND attribute_exists(region_id)",
+        )
+        logger.info("Unsubscribed: %s from %s", email, region_id)
+        # For GET (email link click) return a simple HTML confirmation page
+        if method == "GET":
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "text/html"},
+                "body": (
+                    "<html><body style='font-family:system-ui;text-align:center;padding:60px;background:#0f172a;color:#e2e8f0;'>"
+                    f"<h2>✅ Unsubscribed</h2>"
+                    f"<p>You have been removed from alerts for <strong>{region_id}</strong>.</p>"
+                    "</body></html>"
+                ),
+            }
+        return _response(200, {"message": "unsubscribed", "email": email, "region_id": region_id})
+
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code == "ConditionalCheckFailedException":
+            return _response(404, {"error": "Subscription not found", "email": email, "region_id": region_id})
+        logger.error("DynamoDB delete failed (%s): %s", code, exc)
+        return _response(500, {"error": "Internal error — please try again."})
+
+    except Exception as exc:
+        logger.error("Unsubscribe failed: %s", exc)
+        return _response(500, {"error": f"Internal error: {type(exc).__name__}"})
+
 
 def _response(status_code: int, body: dict) -> dict:
     """API Gateway-compatible response with CORS headers (matches lambda_handler.py)."""

@@ -156,7 +156,9 @@ export default function AlertPanel({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: trimmed, region_id: region?.id }),
       });
-      if (res.status === 400) {
+      if (res.status === 409) {
+        setToast({ kind: 'error', msg: 'You are already subscribed to alerts for this region.' });
+      } else if (res.status === 400) {
         setToast({ kind: 'error', msg: 'That email was rejected — please double-check it.' });
       } else if (!res.ok) {
         setToast({ kind: 'error', msg: `Subscription failed (${res.status}). Please try again.` });

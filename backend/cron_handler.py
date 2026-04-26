@@ -45,7 +45,7 @@ from decimal import Decimal
 
 import boto3
 
-from lambda_handler import assess_region, trigger_webhook
+from lambda_handler import assess_region, trigger_webhook, trigger_email_alerts
 from regions import ALL_REGIONS, REGIONS
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -172,10 +172,11 @@ def lambda_handler(event: dict, context) -> dict:
 
             if is_oblast and _should_fire_webhook(prior, new_status):
                 logger.info(
-                    "Status transition for %s: %s → %s — firing webhook.",
+                    "Status transition for %s: %s → %s — firing webhook + email alerts.",
                     region_id, prior_status, new_status,
                 )
                 trigger_webhook(assessment)
+                trigger_email_alerts(assessment)
                 summary["webhooks_fired"] += 1
                 summary["transitions"].append({
                     "region_id": region_id,

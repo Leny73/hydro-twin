@@ -74,12 +74,30 @@ def assess():
     return _invoke_lambda(assess_handler)
 
 
-@app.route("/subscribe", methods=["POST", "OPTIONS"])
+@app.route("/subscribe", methods=["POST", "DELETE", "OPTIONS"])
 def subscribe():
-    """POST /subscribe  with JSON body  { "email": "...", "region_id": "..." }"""
+    """POST /subscribe — subscribe · DELETE /subscribe — unsubscribe"""
     if request.method == "OPTIONS":
         return "", 204
     return _invoke_lambda(subscribe_handler)
+
+
+@app.route("/unsubscribe", methods=["GET"])
+def unsubscribe():
+    """GET /unsubscribe?email=...&region_id=... — one-click unsubscribe from email link"""
+    fake_event = {
+        "httpMethod": "GET",
+        "path":       "/unsubscribe",
+        "queryStringParameters": dict(request.args),
+        "body":       "{}",
+        "headers":    dict(request.headers),
+    }
+    result = subscribe_handler(fake_event, context=None)
+    body   = result.get("body", "")
+    status = result.get("statusCode", 200)
+    ct     = result.get("headers", {}).get("Content-Type", "application/json")
+    from flask import Response
+    return Response(body, status=status, content_type=ct)
 
 
 @app.route("/status", methods=["GET", "OPTIONS"])
@@ -118,9 +136,10 @@ if __name__ == "__main__":
     print(f"\n  HydroTwin backend running at  http://localhost:{port}")
     print(f"  Health check:                   http://localhost:{port}/health")
     print(f"  Assess endpoint:                http://localhost:{port}/assess     (POST)")
-    print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe  (POST)")
-    print(f"  Status endpoint:                http://localhost:{port}/status     (GET)")
-    print(f"  Reports endpoint:               http://localhost:{port}/reports    (GET, POST)")
-    print(f"  Manual cron run:                http://localhost:{port}/cron-run   (POST)\n")
+    print(f"  Subscribe endpoint:             http://localhost:{port}/subscribe   (POST, DELETE)")
+    print(f"  Unsubscribe endpoint:           http://localhost:{port}/unsubscribe (GET)")
+    print(f"  Status endpoint:                http://localhost:{port}/status      (GET)")
+    print(f"  Reports endpoint:               http://localhost:{port}/reports     (GET, POST)")
+    print(f"  Manual cron run:                http://localhost:{port}/cron-run    (POST)\n")
     print(f"  Set VITE_API_ENDPOINT=http://localhost:{port}/assess in frontend/.env.local\n")
     app.run(host="0.0.0.0", port=port, debug=True)

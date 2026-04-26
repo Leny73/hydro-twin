@@ -109,4 +109,4 @@ REGION_NAMES: dict[str, str] = {
     "BGR.28.5_1": "Yambol Municipality, Yambol Oblast",
 }
 
-KNOWN_REGIONS = frozenset(REGIONS.keys())
+KNOWN_REGIONS = frozenset(ALL_REGIONS.keys())
