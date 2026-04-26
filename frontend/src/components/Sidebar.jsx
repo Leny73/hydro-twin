@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import logoUrl from '../../logo.jpg';
 
 /**
  * Sidebar.jsx — left navigation (static + mobile drawer)
@@ -86,7 +87,13 @@ function NavContent({ lastUpdated, isStale, onLinkClick }) {
   return (
     <>
       <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-800">
-        <span className="text-2xl select-none" aria-hidden="true">💧</span>
+        <img
+          src={logoUrl}
+          alt=""
+          aria-hidden="true"
+          className="w-10 h-10 object-contain select-none flex-shrink-0"
+          draggable="false"
+        />
         <span className="text-base font-bold tracking-widest text-cyan-400 uppercase">
           HydroTwin
         </span>
