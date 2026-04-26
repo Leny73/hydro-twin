@@ -49,7 +49,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-from regions import KNOWN_REGIONS, REGION_NAMES
+from regions import KNOWN_REGIONS, REGION_NAMES, parent_oblast
 import notifications
 
 logger = logging.getLogger()
@@ -194,10 +194,15 @@ def lambda_handler(event: dict, context) -> dict:
         return _response(400, {"error": f"Invalid JSON body: {exc}"})
 
     email           = (body.get("email")           or "").strip().lower()
-    region_id       = (body.get("region_id")       or "").strip()
+    requested_id    = (body.get("region_id")       or "").strip()
     discord_webhook = (body.get("discord_webhook") or "").strip()
     phone           = (body.get("phone")           or "").strip()
     telegram_chat   = (body.get("telegram_chat")   or "").strip()
+
+    # Roll municipality clicks up to the parent oblast so a click on Iskar
+    # (BGR.13.6_1) subscribes the user to Pleven Oblast — one notification per
+    # real event instead of one per municipality.
+    region_id = parent_oblast(requested_id)
 
     # ── 2. Validate ──────────────────────────────────────────────────────
     if not EMAIL_REGEX.match(email):
@@ -205,8 +210,9 @@ def lambda_handler(event: dict, context) -> dict:
 
     if region_id not in KNOWN_REGIONS:
         return _response(400, {
-            "error":   "Unknown region_id",
-            "allowed": sorted(KNOWN_REGIONS),
+            "error":     "Unknown region_id",
+            "requested": requested_id,
+            "allowed":   sorted(KNOWN_REGIONS),
         })
 
     if discord_webhook and not notifications.is_valid_discord_webhook(discord_webhook):
@@ -285,6 +291,11 @@ def lambda_handler(event: dict, context) -> dict:
         "created_at":  created_at,
         "delivered":   delivered,
     }
+    # Surface the rollup so the frontend can show "Subscribed to Pleven Oblast
+    # (covers Iskar)" instead of silently swapping the user's selection.
+    if requested_id and requested_id != region_id:
+        response_body["requested_region_id"] = requested_id
+        response_body["rolled_up_to"]        = region_id
     if save_demo_mode:
         response_body["demo_mode"] = True
         response_body["warning"]   = "Stored in demo mode only (DynamoDB unavailable)"

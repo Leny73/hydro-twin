@@ -221,9 +221,16 @@ export default function AlertPanel({
         const detail = channels.length
           ? ` Welcome message sent via ${channels.join(' + ')}.`
           : ' Welcome message will arrive shortly.';
+        // Backend rolls municipality clicks up to the parent oblast — surface
+        // that to the user so the toast matches what they actually got.
+        const targetName  = data?.region_name ?? region?.name;
+        const rolledUp    = data?.rolled_up_to && data?.requested_region_id;
+        const rollupHint  = rolledUp && region?.name && targetName !== region.name
+          ? ` (covers ${region.name})`
+          : '';
         setToast({
           kind: 'success',
-          msg:  `✅ Subscribed to ${region?.name}.${detail}`,
+          msg:  `✅ Subscribed to ${targetName}${rollupHint}.${detail}`,
         });
         setEmail('');
         setDiscordEnabled(false);
