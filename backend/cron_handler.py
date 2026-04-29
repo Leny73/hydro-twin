@@ -59,6 +59,11 @@ STATUS_TABLE        = os.environ.get("STATUS_TABLE",        "HydroTwinStatus")
 SUBSCRIPTIONS_TABLE = os.environ.get("SUBSCRIPTIONS_TABLE", "HydroTwinSubscriptions")
 AWS_REGION          = os.environ.get("AWS_REGION",          "us-east-1")
 
+# ── Demo mode — mirrors lambda_handler.DEMO_MODE ─────────────────────────────
+# When True the cron run is a no-op: no Bedrock calls, no DynamoDB writes,
+# no webhooks, no subscriber emails.  Flip both flags together.
+DEMO_MODE = True
+
 # Lazy DynamoDB clients — instantiated on first invocation, reused warm.
 _TABLE      = None
 _SUBS_TABLE = None
@@ -231,6 +236,11 @@ def lambda_handler(event: dict, context) -> dict:
 
     Returns a summary dict (visible in CloudWatch + manual `aws lambda invoke`).
     """
+    # DEMO_MODE: skip all assessments — no Bedrock calls, no DynamoDB writes, no webhooks.
+    if DEMO_MODE:
+        logger.info("DEMO_MODE=True — cron run skipped (no Bedrock calls, no cost)")
+        return {"demo_mode": True, "message": "Cron disabled in demo mode", "regions_total": 0}
+
     logger.info(
         "HydroTwinCron run started — %d region(s) (%d oblast + %d municipality)",
         len(ALL_REGIONS), len(REGIONS), len(ALL_REGIONS) - len(REGIONS),

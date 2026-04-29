@@ -44,6 +44,10 @@ const API_ENDPOINT =
   import.meta.env.VITE_API_ENDPOINT ??
   'https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/assess';
 
+// ── Demo mode — set true to skip all live /assess calls (no Claude cost) ─────
+// Flip to false only when Bedrock access + budget are confirmed.
+const DEMO_MODE = true;
+
 // ── Status → polygon fill colour ─────────────────────────────────────────────
 const STATUS_COLORS = {
   SAFE:            '#10B981',
@@ -406,6 +410,24 @@ export default function Overview() {
     setIsLoading(true);
     setError(null);
     setAssessment(null);
+
+    // DEMO_MODE: skip live API call — no Claude cost, instant response.
+    if (DEMO_MODE) {
+      const demoData = buildDemoResponse(region);
+      setAssessment(demoData);
+      if (demoData?.status) {
+        patchRegionStatus(region.id, {
+          status:               demoData.status,
+          confidence:           demoData.confidence,
+          reasoning:            demoData.reasoning,
+          reasoning_structured: demoData.reasoning_structured,
+          sources:              [],
+          assessed_at:          new Date().toISOString(),
+        });
+      }
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(API_ENDPOINT, {

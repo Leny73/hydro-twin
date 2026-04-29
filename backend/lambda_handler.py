@@ -54,6 +54,10 @@ BEDROCK_MODEL_ID     = os.environ.get(
 )
 BEDROCK_REGION       = os.environ.get("BEDROCK_REGION", "us-east-1")
 
+# ── Demo mode — set True to skip all Bedrock/Claude calls (zero cost) ────────
+# Flip to False only when AWS Bedrock access + budget are confirmed.
+DEMO_MODE = True
+
 # Path to the meteorology rules file — bundled inside the Lambda package
 RULES_FILE = os.path.join(os.path.dirname(__file__), "meteorology_rules.md")
 
@@ -87,6 +91,41 @@ def call_bedrock_agent(data: dict, rules: str, region_name: str) -> dict:
             reasoning_structured  – dict with 4 keys mapping to the v3 dashboard sections:
                                     whats_happening, why_it_matters, current_context, next_step
     """
+    # DEMO_MODE: return static response immediately — no Bedrock call, no cost.
+    if DEMO_MODE:
+        return {
+            "status":     "FLOOD_WATCH",
+            "confidence": 0.78,
+            "reasoning": (
+                f"**Flood watch in effect — elevated risk over the next 24 hours.**\n\n"
+                f"Recent observations for {region_name} show:\n"
+                "- River levels have risen **0.8 m** above the seasonal baseline in the past 3 days\n"
+                "- Ground saturation is high at **89%** — soils cannot absorb much more water\n"
+                "- A further **35 mm of rain** is forecast within the next 24 hours\n\n"
+                "If rainfall arrives as expected, watch for fast rises along local rivers. "
+                "_(Demo mode — live AI disabled to manage costs.)_"
+            ),
+            "reasoning_structured": {
+                "whats_happening": (
+                    f"Conditions across {region_name} are trending toward elevated flood risk. "
+                    "Rivers are running well above seasonal baseline and the ground is nearly saturated."
+                ),
+                "why_it_matters": (
+                    "- River levels are up **0.8 m** above the seasonal baseline in the past 3 days.\n"
+                    "- Soil saturation is at **89%** — the ground can't absorb much more water.\n"
+                    "- A further **35 mm of rain** is forecast within the next 24 hours."
+                ),
+                "current_context": (
+                    "Spring runoff is still elevated for this part of the year and the floodplain has "
+                    "limited remaining capacity for additional surface water."
+                ),
+                "next_step": (
+                    "Pre-position pumps along local rivers, brief downstream villages, and review "
+                    "evacuation routes for low-lying districts."
+                ),
+            },
+        }
+
     bedrock = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 
     # ── Prompt: inject rules + live sensor data ───────────────────────────
