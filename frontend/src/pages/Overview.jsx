@@ -47,6 +47,18 @@ const API_ENDPOINT =
 // ── Demo mode — set true to skip all live /assess calls (no Claude cost) ─────
 // Flip to false only when Bedrock access + budget are confirmed.
 const DEMO_MODE = true;
+// Hide motorway/road clutter (A1/A2 shields, road labels, etc.) from the
+// satellite-streets style on load. We keep city/place labels and the
+// satellite imagery — only road network + road shields are dropped.
+const ROAD_LAYER_PATTERN = /^(road|bridge|tunnel|motorway)/i;
+const hideRoadLayers = (event) => {
+  const map = event.target;
+  for (const layer of map.getStyle().layers) {
+    if (ROAD_LAYER_PATTERN.test(layer.id)) {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+    }
+  }
+};
 
 // ── Status → polygon fill colour ─────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -691,6 +703,7 @@ export default function Overview() {
         onClick={handleMapClick}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onLoad={hideRoadLayers}
         fog={{
           range:            [0.5, 10],
           color:            '#0c1a2e',

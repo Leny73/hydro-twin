@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>HydroTwin · Pitch Flow & Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#0f172a; --panel2:#111c33; --line:#1e293b;
+    --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --accent2:#22d3ee;
+    --green:#10b981; --yellow:#f59e0b; --red:#ef4444; --water:#0ea5e9;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;font-size:15px;-webkit-font-smoothing:antialiased}
+  body{max-width:1200px;margin:0 auto;padding:32px 24px 80px}
+  header{padding:28px 28px;border-radius:16px;
+    background:linear-gradient(135deg,#0c4a6e 0%,#082f49 60%,#0b1220 100%);
+    border:1px solid var(--line);margin-bottom:32px}
+  header h1{margin:0 0 8px;font-size:32px;letter-spacing:-.5px}
+  header p{margin:0;color:var(--muted);font-size:15px}
+  header .pitch{margin-top:14px;padding:14px 16px;border-left:3px solid var(--accent);
+    background:rgba(56,189,248,.07);border-radius:6px;font-style:italic;color:#e0f2fe}
+  h2{margin:48px 0 14px;font-size:22px;border-bottom:1px solid var(--line);padding-bottom:10px}
+  h3{margin:24px 0 10px;font-size:17px;color:var(--accent2)}
+  p{color:#cbd5e1}
+  table{width:100%;border-collapse:collapse;margin:14px 0 22px;
+    background:var(--panel);border-radius:8px;overflow:hidden;
+    border:1px solid var(--line);font-size:14px}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--panel2);color:var(--accent);font-weight:600;font-size:13px;
+    text-transform:uppercase;letter-spacing:.4px}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(56,189,248,.04)}
+  code{background:var(--panel2);padding:2px 6px;border-radius:4px;
+    font-family:'JetBrains Mono','Fira Code',Consolas,monospace;font-size:13px;color:#fbbf24}
+  .diagram{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:24px;margin:18px 0 28px;overflow-x:auto;
+    box-shadow:0 4px 24px rgba(0,0,0,.3)}
+  .diagram svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  .toc{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:18px 24px;margin-bottom:28px}
+  .toc ol{margin:8px 0 0;padding-left:22px;column-count:2;column-gap:32px}
+  .toc li{margin:4px 0;break-inside:avoid}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  blockquote{margin:14px 0;padding:14px 18px;border-left:3px solid var(--water);
+    background:rgba(14,165,233,.07);border-radius:6px;color:#bae6fd;font-style:italic}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;
+    font-weight:600;margin-right:6px}
+  .pill.safe{background:rgba(16,185,129,.15);color:#6ee7b7;border:1px solid #10b981}
+  .pill.watch{background:rgba(245,158,11,.15);color:#fcd34d;border:1px solid #f59e0b}
+  .pill.warn{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid #ef4444}
+  footer{margin-top:64px;padding:24px;text-align:center;color:var(--muted);
+    border-top:1px solid var(--line);font-size:13px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h4{margin:0 0 8px;color:var(--accent2);font-size:15px}
+  ul.tight{margin:6px 0;padding-left:22px}
+  ul.tight li{margin:3px 0}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 16px;font-size:13px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{width:14px;height:14px;border-radius:3px;display:inline-block}
+  @media print{
+    body{max-width:none;background:white;color:black;padding:20px}
+    .diagram{break-inside:avoid;border-color:#ccc;background:white;box-shadow:none}
+    header{background:#f1f5f9;color:black;border:1px solid #ccc}
+    h2,h3,p,td,th{color:black !important}
+    table{background:white;border:1px solid #ccc}
+    th{background:#f1f5f9;color:#0c4a6e}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌊 HydroTwin — Pitch Flow & Architecture</h1>
+  <p>Real-time Copernicus Sentinel EO + OpenMeteo weather → AWS Bedrock (Claude 3 Sonnet) → email + Discord alerts on every status transition, for 32 Bulgarian regions, every 30 minutes.</p>
+  <div class="pitch">
+    "NIMH delivers the warning. bg-ALERT delivers the alarm. <strong>HydroTwin delivers the decision.</strong>"
+  </div>
+</header>
+
+<div class="toc">
+  <strong>📋 Contents</strong>
+  <ol>
+    <li><a href="#arch">High-Level Architecture</a></li>
+    <li><a href="#lambdas">The 8 Lambdas</a></li>
+    <li><a href="#db">Database Schema</a></li>
+    <li><a href="#data">Real Data Sources</a></li>
+    <li><a href="#ai">The AI Layer</a></li>
+    <li><a href="#click">User Click Flow</a></li>
+    <li><a href="#subscribe">Subscribe Flow</a></li>
+    <li><a href="#cron">Cron Transition Alerts</a></li>
+    <li><a href="#unsubscribe">Unsubscribe (HMAC)</a></li>
+    <li><a href="#routes">Frontend Routes</a></li>
+    <li><a href="#fallback">Demo-Mode Fallbacks</a></li>
+    <li><a href="#demo">Demo Walkthrough</a></li>
+  </ol>
+</div>
+
+<h2 id="arch">🗺️ 1. High-Level Architecture</h2>
+<p>Browser-only frontend on Vercel, 8 Lambdas behind API Gateway, 3 DynamoDB tables, Bedrock for AI, plus Sentinel Hub + OpenMeteo + Brevo + Discord on the outside.</p>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    User["👤 User<br/>Mayor / Civil Protection"]
+    Browser["🖥️ Browser<br/>Vercel · Vite + React<br/>Mapbox · Tailwind"]
+
+    subgraph AWS["☁️ AWS"]
+        APIGW["🚪 API Gateway"]
+        subgraph Lambdas["λ Lambdas (8)"]
+            L1["🎯 /assess"]
+            L2["📡 cron 30min"]
+            L3["✉️ /subscribe"]
+            L4["🔓 /unsubscribe"]
+            L5["📊 /status"]
+            L6["💬 /chat-alert"]
+            L7["🚧 /dams"]
+            L8["📝 /reports"]
+        end
+        subgraph DDB["🗄️ DynamoDB"]
+            T1[("HydroTwinStatus")]
+            T2[("HydroTwinSubscriptions")]
+            T3[("HydroTwinReports")]
+        end
+        Bedrock["🧠 AWS Bedrock<br/>Claude 3 Sonnet"]
+    end
+
+    subgraph External["🌍 External Data &amp; Comms"]
+        SH["🛰️ Sentinel Hub<br/>NDVI · NDWI"]
+        OM["🌦️ OpenMeteo<br/>precip · soil · temp"]
+        Brevo["📧 Brevo Email"]
+        Discord["💬 Discord Webhooks"]
+    end
+
+    User --> Browser
+    Browser <-->|HTTPS + JSON| APIGW
+    APIGW --> Lambdas
+
+    L1 --> SH
+    L1 --> OM
+    L1 --> Bedrock
+    L1 --> T1
+    L2 --> SH
+    L2 --> OM
+    L2 --> Bedrock
+    L2 --> T1
+    L2 --> T2
+    L2 --> Brevo
+    L2 --> Discord
+    L3 --> T2
+    L3 --> Brevo
+    L3 --> Discord
+    L4 --> T2
+    L5 --> T1
+    L6 --> Bedrock
+    L7 --> SH
+    L7 --> Discord
+    L8 --> T3
+</pre>
+</div>
+
+<h2 id="lambdas">🧠 2. The 8 Lambdas</h2>
+<table>
+<thead><tr><th>#</th><th>Lambda</th><th>Trigger</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>🎯 <code>/assess</code></td><td>API GW POST</td><td>Pulls live EO + weather, calls Claude, returns structured risk assessment</td></tr>
+<tr><td>2</td><td>📡 <strong>cron</strong></td><td>EventBridge <code>rate(30 min)</code></td><td>Re-runs <code>/assess</code> for <strong>all 32 regions</strong>, writes snapshots, fires alerts on <strong>transitions only</strong></td></tr>
+<tr><td>3</td><td>✉️ <code>/subscribe</code></td><td>API GW POST</td><td>Saves to DDB, sends welcome email + Discord embed</td></tr>
+<tr><td>4</td><td>🔓 <code>/unsubscribe</code></td><td>API GW GET/POST</td><td>HMAC-signed one-click, idempotent delete</td></tr>
+<tr><td>5</td><td>📊 <code>/status</code></td><td>API GW GET</td><td>Pre-computed snapshots for instant map paint</td></tr>
+<tr><td>6</td><td>💬 <code>/chat-alert</code></td><td>API GW POST</td><td>"HydroSentry" Claude assistant — Q&amp;A scoped to active alert</td></tr>
+<tr><td>7</td><td>🚧 <code>/dams</code></td><td>API GW GET</td><td>Monitors 3 Bulgarian dams (Kardzhali · Studen Kladenets · Ivaylovgrad)</td></tr>
+<tr><td>8</td><td>📝 <code>/reports</code></td><td>API GW POST/GET</td><td>Citizen incident submissions + triage feed</td></tr>
+</tbody>
+</table>
+
+<h2 id="db">🗄️ 3. Database Schema (3 DynamoDB Tables)</h2>
+<div class="diagram">
+<pre class="mermaid">
+erDiagram
+    HydroTwinStatus {
+        string region_id PK
+        string status
+        decimal confidence
+        string reasoning
+        map reasoning_structured
+        list sources
+        string assessed_at
+    }
+    HydroTwinSubscriptions {
+        string email PK
+        string region_id SK
+        string discord_webhook
+        string phone
+        string telegram_chat
+        string created_at
+    }
+    HydroTwinReports {
+        string report_id PK
+        string email
+        string region_id
+        string description
+        decimal lat
+        decimal lng
+        string submitted_at
+    }
+</pre>
+</div>
+<div class="grid-2">
+  <div class="card">
+    <h4>🎯 Composite key on Subscriptions</h4>
+    <p>PK <code>email</code> + SK <code>region_id</code> → one user can subscribe to multiple oblasts cleanly.</p>
+  </div>
+  <div class="card">
+    <h4>🏘️ Municipality roll-up</h4>
+    <p>Clicking <code>BGR.13.6_1</code> saves to parent oblast <code>pleven</code>. One subscription per oblast, not 29 per municipality.</p>
+  </div>
+</div>
+
+<h2 id="data">🛰️ 4. Real Data Sources (no stubs)</h2>
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    S2["🛰️ Sentinel-2 L2A<br/>NDVI · NDWI<br/>14-day, cloud-filtered"]
+    OMD["🌦️ OpenMeteo<br/>30-day precip<br/>7-day temp<br/>soil moisture<br/>24h forecast"]
+    Get["sentinel_extractor.py<br/>get_eo_and_weather_data(bbox)"]
+    K["🔒 Locked output schema<br/><br/>ndvi · soil_moisture_pct<br/>precip_mm_7d · precip_mm_30d<br/>flood_extent_km2 · temp_max_c<br/>ndwi · soil_moisture_7d_delta<br/>forecast_precip_24h_mm<br/>data_timestamp · source"]
+
+    S2 --> Get
+    OMD --> Get
+    Get --> K
+</pre>
+</div>
+<ul class="tight">
+  <li>🛰️ <strong>Sentinel Hub Statistical API</strong> (Copernicus Data Space) — OAuth2, evalscript filters clouds (SCL 4/5)</li>
+  <li>🌦️ <strong>OpenMeteo</strong> — free, no key, 30-day historical window</li>
+  <li>🛡️ <strong>Fallback:</strong> if SH credentials missing, skip SH and use OpenMeteo only — note it in the <code>source</code> field</li>
+</ul>
+
+<h2 id="ai">🤖 5. The AI Layer (Bedrock + Claude 3 Sonnet)</h2>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    A["1️⃣ Audience framing<br/>'You're advising Bulgarian mayors,<br/>civil-protection officers...'"]
+    B["2️⃣ meteorology_rules.md<br/>injected verbatim<br/>(thresholds, compound rules,<br/>5 status codes)"]
+    C["3️⃣ Live sensor data as JSON<br/>(NDVI, NDWI, precip,<br/>soil moisture, forecast)"]
+
+    Claude["🧠 Claude 3 Sonnet<br/>temperature 0.1<br/>max_tokens 1200<br/>strict JSON output"]
+
+    R1["status: FLOOD_WATCH"]
+    R2["confidence: 0.82"]
+    R3["reasoning_structured:<br/>• whats_happening<br/>• why_it_matters (numbers in **bold**)<br/>• current_context<br/>• next_step (action TODAY)"]
+
+    A --> Claude
+    B --> Claude
+    C --> Claude
+    Claude --> R1
+    Claude --> R2
+    Claude --> R3
+</pre>
+</div>
+<div class="legend">
+  <span><span class="pill safe">SAFE</span></span>
+  <span><span class="pill watch">DROUGHT_WATCH / FLOOD_WATCH</span></span>
+  <span><span class="pill warn">DROUGHT_WARNING / FLOOD_WARNING</span></span>
+</div>
+<p>Temperature 0.1 = deterministic, parseable, repeatable. Rules injected verbatim → Claude reasons against the same thresholds NIMH would use. Audience-locked → no jargon (no NDVI/SPI/SAR), translates EO into actions a mayor takes.</p>
+
+<h2 id="click">🖱️ 6. User Click Flow (the 3-second magic)</h2>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as API Gateway
+    participant L as λ /assess
+    participant SH as Sentinel Hub
+    participant OM as OpenMeteo
+    participant BR as Bedrock
+    participant DB as HydroTwinStatus
+
+    User->>FE: 🖱️ Click region marker
+    FE->>FE: setSearchParams(?region=pleven)
+    Note over FE: Cache-first paint<br/>from HydroTwinStatus
+
+    FE->>API: POST /assess { region_id, bbox }
+    API->>L: invoke
+    par
+        L->>SH: NDVI + NDWI (14-day)
+        L->>OM: precip + soil + temp
+    end
+    SH-->>L: stats
+    OM-->>L: stats
+    L->>L: load meteorology_rules.md
+    L->>BR: Bedrock invoke
+    BR-->>L: { status, confidence, reasoning_structured }
+    L->>DB: optional snapshot upsert
+    L-->>API: 200 JSON
+    API-->>FE: assessment
+    FE-->>User: 🎨 AlertPanel renders
+</pre>
+</div>
+
+<h2 id="subscribe">📬 7. Subscribe Flow</h2>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant L as λ /subscribe
+    participant DB as HydroTwinSubscriptions
+    participant Snap as HydroTwinStatus
+    participant Brevo as Brevo
+    participant DC as Discord
+
+    User->>FE: Submit email + (optional) Discord webhook
+    FE->>L: POST { email, region_id, discord_webhook }
+    L->>L: ✅ validate email + region<br/>✅ shape-check Discord URL<br/>✅ municipality → oblast roll-up
+    L->>DB: PutItem (ConditionExpression:<br/>attribute_not_exists)
+    alt Already exists
+        DB-->>L: ConditionalCheckFailed
+        L-->>FE: 409 already subscribed
+    else New
+        DB-->>L: ✅ saved
+        L->>Snap: GetItem(region_id)
+        Snap-->>L: current snapshot
+        par Welcome fan-out
+            L->>Brevo: HTML email + HMAC unsub link
+            L->>DC: Webhook embed
+        end
+        L-->>FE: 201 { delivered }
+    end
+</pre>
+</div>
+
+<h2 id="cron">⏰ 8. Cron Transition Alerts (the autonomous brain)</h2>
+<p>This is the part that runs <strong>while everyone sleeps</strong> — and it's the differentiator vs. a static dashboard.</p>
+<div class="diagram">
+<pre class="mermaid">
+flowchart TB
+    Start(["⏰ EventBridge<br/>rate(30 minutes)"])
+    Loop{{"🔁 For each of 32 regions<br/>(3 oblasts + 29 municipalities)"}}
+    Prior["📖 Read prior status<br/>from HydroTwinStatus"]
+    Assess["🎯 Run assess_region<br/>(Sentinel + OpenMeteo + Bedrock)"]
+    Write["📸 Write new snapshot"]
+    Decide{"❓ Status changed?"}
+    Skip["💤 Silent — no fire"]
+    Channel["📣 Fire shared Discord channel"]
+    Subs["🔍 Scan subscribers WHERE region_id"]
+    Fan{{"📬 For each subscriber"}}
+    Email["✉️ Personalized alert email"]
+    PerUser["💬 Per-user Discord webhook"]
+
+    Start --> Loop
+    Loop --> Prior
+    Prior --> Assess
+    Assess --> Write
+    Write --> Decide
+    Decide -- "SAFE → SAFE" --> Skip
+    Decide -- "any transition" --> Channel
+    Channel --> Subs
+    Subs --> Fan
+    Fan --> Email
+    Fan --> PerUser
+</pre>
+</div>
+
+<h3>Transition matrix — when do we fire?</h3>
+<table>
+<thead><tr><th>Prior</th><th>New</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td>none (first run)</td><td>SAFE</td><td>💤 silent</td></tr>
+<tr><td>none (first run)</td><td>non-SAFE</td><td>🔥 fire</td></tr>
+<tr><td>SAFE</td><td>SAFE</td><td>💤 silent</td></tr>
+<tr><td>SAFE</td><td>any non-SAFE</td><td>🔥 fire (escalation)</td></tr>
+<tr><td>non-SAFE</td><td>SAFE</td><td>🔥 fire (recovery)</td></tr>
+<tr><td>non-SAFE</td><td>different non-SAFE</td><td>🔥 fire (re-grade)</td></tr>
+</tbody>
+</table>
+
+<h2 id="unsubscribe">🔓 9. Unsubscribe Flow (HMAC-signed, one-click)</h2>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant Email as 📧 Alert email
+    actor User
+    participant FE as /unsubscribe page
+    participant L as λ /unsubscribe
+    participant DB as HydroTwinSubscriptions
+
+    Note over Email: Footer link:<br/>?e=user@x.com&r=pleven&t={hmac_token}
+    User->>Email: 🖱️ Click "Unsubscribe"
+    Email->>FE: GET /unsubscribe?e=...&r=...&t=...
+    FE->>L: POST { e, r, t }
+    L->>L: 🔐 verify HMAC-SHA256<br/>(constant-time compare)
+    alt Token valid
+        L->>DB: DeleteItem (idempotent)
+        L-->>FE: 200 unsubscribed
+        FE-->>User: ✅ "You're unsubscribed"
+    else Bad token
+        L-->>FE: 400 invalid token
+        FE-->>User: ❌ "Invalid or expired link"
+    end
+</pre>
+</div>
+<ul class="tight">
+  <li>🔐 Token = <code>HMAC-SHA256(secret, "email|region_id")[:16]</code> — unguessable, unforgeable</li>
+  <li>⏱️ <code>hmac.compare_digest()</code> = constant-time compare, no timing oracle</li>
+  <li>♻️ Delete is idempotent — clicking twice doesn't error</li>
+</ul>
+
+<h2 id="routes">🌐 10. Frontend Routes</h2>
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    Root["🌍 / Overview<br/>Mapbox + AlertPanel"]
+    Inc["📋 /incidents<br/>Citizen report triage"]
+    Src["📚 /sources<br/>Data attribution"]
+    Dam["🚧 /dams<br/>3 Bulgarian dams"]
+    Sub["📝 /submit<br/>Public incident form"]
+    Uns["🔓 /unsubscribe<br/>HMAC token landing"]
+    NF["🚫 /* NotFound"]
+
+    Layout["🧱 Layout (sidebar)"] --> Root
+    Layout --> Inc
+    Layout --> Src
+    Layout --> Dam
+
+    Public["🌐 No layout"] --> Sub
+    Public --> Uns
+    Public --> NF
+</pre>
+</div>
+<p>Deep links: <code>/?region=pleven</code> · <code>/?region=BGR.13.9_1</code> · <code>/unsubscribe?e=…&amp;r=…&amp;t=…</code></p>
+
+<h2 id="fallback">🛡️ 11. Demo-Mode Fallbacks</h2>
+<blockquote>The pitch demo will <strong>never</strong> break, by design.</blockquote>
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+    B1["❌ Bedrock fails"] --> B1F["✅ Hardcoded FLOOD_WATCH<br/>+ Demo mode tag"]
+    B2["❌ Sentinel Hub creds missing"] --> B2F["✅ OpenMeteo only<br/>+ note in source"]
+    B3["❌ Brevo unset"] --> B3F["✅ Log demo-mode<br/>still return success"]
+    B4["❌ DynamoDB missing"] --> B4F["✅ /subscribe → 201<br/>+ demo_mode flag"]
+    F1["❌ /assess unreachable"] --> F1F["✅ buildDemoResponse<br/>+ yellow banner"]
+    F2["❌ /status empty"] --> F2F["✅ Neutral grey polygons"]
+
+    classDef fail fill:#7f1d1d,stroke:#fca5a5,color:#fff
+    classDef ok fill:#064e3b,stroke:#6ee7b7,color:#fff
+    class B1,B2,B3,B4,F1,F2 fail
+    class B1F,B2F,B3F,B4F,F1F,F2F ok
+</pre>
+</div>
+
+<h2 id="demo">🎤 12. Demo Walkthrough Cheat Sheet</h2>
+<table>
+<thead><tr><th>Step</th><th>Do</th><th>Say</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Open the map</td><td>"3 oblasts + 29 municipalities, Mapbox satellite, click anywhere"</td></tr>
+<tr><td>2</td><td>Click <strong>Pleven Oblast</strong></td><td>"Cache-first paint, instant. Then in the background, /assess hits Sentinel + OpenMeteo + Bedrock"</td></tr>
+<tr><td>3</td><td>Show AlertPanel</td><td>"4 plain-language sections. No NDVI jargon — what's happening, why it matters, context, next step"</td></tr>
+<tr><td>4</td><td>Click a municipality (Nikopol)</td><td>"GADM GID_2 codes, 29 of them — same backend, smaller bbox"</td></tr>
+<tr><td>5</td><td>Subscribe with email</td><td>"201 → welcome email lands → Discord embed fires"</td></tr>
+<tr><td>6</td><td>Open <code>/dams</code></td><td>"3 dams correlated with Sentinel NDWI: WATER_REGIME, STABLE, OPEN_GATES"</td></tr>
+<tr><td>7</td><td>Open <code>/incidents</code></td><td>"Citizens close the loop — POST /reports, triage feed for civil protection"</td></tr>
+<tr><td>8</td><td>Mention cron</td><td>"30-min EventBridge → 32 regions → fires only on transitions → email + per-user Discord"</td></tr>
+</tbody>
+</table>
+
+<blockquote style="margin-top:32px">
+"Click any region in Bulgaria → in 3 seconds we pull live Sentinel-2 NDVI, NDWI, and OpenMeteo weather, feed Bulgaria-calibrated meteorological thresholds and the live numbers to <strong>Claude on Bedrock</strong>, and return a structured assessment a mayor can act on. Subscribe, and you'll get an email + Discord alert the moment your oblast transitions out of SAFE — and we run that check <strong>every 30 minutes, automatically, for all 32 regions</strong>."
+</blockquote>
+
+<footer>
+  HydroTwin · CASSINI Hackathon Bulgaria 2026 · Sofia · 25–27 April<br>
+  <span style="color:#475569">Open in any modern browser. Print-friendly via Ctrl/Cmd + P.</span>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#0f172a',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e2e8f0',
+      primaryBorderColor: '#38bdf8',
+      lineColor: '#64748b',
+      secondaryColor: '#0c4a6e',
+      tertiaryColor: '#082f49',
+      mainBkg: '#1e293b',
+      secondBkg: '#0c4a6e',
+      tertiaryBkg: '#082f49',
+      nodeBorder: '#38bdf8',
+      clusterBkg: '#0f172a',
+      clusterBorder: '#475569',
+      defaultLinkColor: '#94a3b8',
+      titleColor: '#38bdf8',
+      edgeLabelBackground: '#0f172a',
+      noteBkgColor: '#082f49',
+      noteTextColor: '#e0f2fe',
+      noteBorderColor: '#38bdf8',
+      actorBkg: '#0c4a6e',
+      actorBorder: '#38bdf8',
+      actorTextColor: '#e2e8f0',
+      actorLineColor: '#64748b',
+      signalColor: '#94a3b8',
+      signalTextColor: '#e2e8f0',
+      labelBoxBkgColor: '#1e293b',
+      labelBoxBorderColor: '#38bdf8',
+      labelTextColor: '#e2e8f0',
+      loopTextColor: '#e2e8f0',
+      activationBkgColor: '#0c4a6e',
+      activationBorderColor: '#38bdf8',
+      sequenceNumberColor: '#fff'
+    },
+    flowchart: { curve: 'basis', padding: 20, useMaxWidth: true },
+    sequence: { useMaxWidth: true, mirrorActors: false, bottomMarginAdj: 10 },
+    er: { useMaxWidth: true }
+  });
+</script>
+
+</body>
+</html>

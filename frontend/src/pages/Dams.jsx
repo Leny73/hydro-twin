@@ -35,6 +35,18 @@ const DAMS_ENDPOINT = API_ENDPOINT.replace(/\/assess$/, '/dams');
 // regardless of backend availability.
 const FORCE_DEMO = false;
 
+// Hide motorway/road clutter (A1/A2 shields, etc.) from the satellite-streets
+// style on load — keep place labels + satellite imagery, drop the road network.
+const ROAD_LAYER_PATTERN = /^(road|bridge|tunnel|motorway)/i;
+const hideRoadLayers = (event) => {
+  const map = event.target;
+  for (const layer of map.getStyle().layers) {
+    if (ROAD_LAYER_PATTERN.test(layer.id)) {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+    }
+  }
+};
+
 // ── Alert-level display metadata ──────────────────────────────────────────────
 const ALERT_META = {
   WATER_REGIME: {
@@ -87,7 +99,7 @@ const DEMO_RESPONSE = {
   dams: [
     {
       // ✅ STABLE — Кърджали sits comfortably between 25% and 90%
-      id: 'kardzhali', name: 'Язовир Кърджали', river: 'Арда',
+      id: 'kardzhali', name: 'Kardzhali Reservoir', river: 'Arda',
       lat: 41.6333, lon: 25.3400, capacity_mln_m3: 497.236,
       fill_pct: 62.4, volume_mln_m3: 310.3, data_date: '2017-07-30',
       ndwi: 0.31, ndwi_source: 'sentinel-2', ndwi_threshold_high: 0.45, ndwi_threshold_low: 0.18,
@@ -98,7 +110,7 @@ const DEMO_RESPONSE = {
     },
     {
       // 🟡 WATER_REGIME — Ст. Кладенец is critically low after a dry summer
-      id: 'studen-kladenets', name: 'Язовир Студен Кладенец', river: 'Арда',
+      id: 'studen-kladenets', name: 'Studen Kladenets Reservoir', river: 'Arda',
       lat: 41.6122, lon: 25.6405, capacity_mln_m3: 387.772,
       fill_pct: 18.7, volume_mln_m3: 72.5, data_date: '2017-09-15',
       ndwi: 0.09, ndwi_source: 'sentinel-2', ndwi_threshold_high: 0.44, ndwi_threshold_low: 0.19,
@@ -109,7 +121,7 @@ const DEMO_RESPONSE = {
     },
     {
       // 🚨 OPEN_GATES — Ивайловград at 93% after heavy spring snowmelt
-      id: 'ivaylovgrad', name: 'Язовир Ивайловград', river: 'Арда',
+      id: 'ivaylovgrad', name: 'Ivaylovgrad Reservoir', river: 'Arda',
       lat: 41.5839, lon: 26.1071, capacity_mln_m3: 156.702,
       fill_pct: 93.2, volume_mln_m3: 146.1, data_date: '2017-04-18',
       ndwi: 0.54, ndwi_source: 'sentinel-2', ndwi_threshold_high: 0.46, ndwi_threshold_low: 0.21,
@@ -493,6 +505,7 @@ export default function Dams() {
             style={{ width: '100%', height: '100%' }}
             mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
             fog={{ color: '#0a0a0a', 'high-color': '#000', 'horizon-blend': 0.02 }}
+            onLoad={hideRoadLayers}
           >
             <NavigationControl position="top-left" />
             {(dams?.dams ?? []).map(dam => (

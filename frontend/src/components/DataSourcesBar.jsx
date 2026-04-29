@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Satellite, Radio, CloudRain } from 'lucide-react';
+import { Satellite, CloudRain } from 'lucide-react';
 
 /**
  * DataSourcesBar.jsx — bottom "Powered by trusted data" strip (desktop only)
@@ -14,9 +14,8 @@ import { Satellite, Radio, CloudRain } from 'lucide-react';
  */
 
 const SOURCES = [
-  { Icon: Satellite,  iconColor: 'text-cyan-400',  name: 'Copernicus',        sub: 'Sentinel-1 / -2 / -3 · SAR & optical' },
-  { Icon: Radio,      iconColor: 'text-indigo-400', name: 'Galileo',           sub: 'GNSS positioning & timing'           },
-  { Icon: CloudRain,  iconColor: 'text-sky-400',    name: 'Rainfall datasets', sub: 'OpenMeteo + ERA5 · precipitation'    },
+  { Icon: Satellite,  iconColor: 'text-green-400',  name: 'Sentinel-2',        sub: 'NDVI · NDWI · vegetation · optical'  },
+  { Icon: CloudRain,  iconColor: 'text-sky-400',    name: 'OpenMeteo',         sub: 'Precipitation · ERA5 · forecast'     },
 ];
 
 export default function DataSourcesBar({ dataQuality = 'Good' }) {
